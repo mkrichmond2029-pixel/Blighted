@@ -25,7 +25,6 @@ function MapManager:Init()
 		end
 	end
 
-    -- this was fucking useless -dys
     -- MapManager.CurrentMap = nil
     -- MapManager.LastMap = nil
 end
