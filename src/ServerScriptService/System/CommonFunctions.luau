@@ -1,40 +1,3 @@
-local CommonFunctions = {
-	--- IDs used in the anti-cheat to display kick messages.
-	KickIDs = {
-		Noclipping = {
-			ID = "0001",
-			Message = "Player assumed to be noclipping.",
-		},
-		Flying = {
-			ID = "0002",
-			Message = "Player assumed to be flying.",
-		},
-		TPing = {
-			ID = "0003",
-			Message = "Player assumed to be teleporting across great distances.",
-		},
-		SpeedHacking = {
-			ID = "0004",
-			Message = "Player assumed to be speed hacking.",
-		},
-	},
-	AdminPerms = {
-		{
-			Name = "MrFuzzy",
-			UserId = nil,
-			Rank = "Modeler/Music",
-		},
-		{
-			Name = "EvershadeBlight",
-			UserId = nil,
-			Rank = "Owner",
-		},
-	},
-
-	--don't add anything in here
-	Commands = {},
-	CommandDebounce = {},
-}
 
 local BadgeService = game:GetService("BadgeService")
 local Debris = game:GetService("Debris")
@@ -704,6 +667,7 @@ function CommonFunctions.ApplyVelocity(Part: Model | BasePart, FuncSettings: App
 	LinearVel.Attachment0 = Attachment
 	--parent it to the part
 	LinearVel.Parent = Part
+	-- This never gets destroyed so add janitor to this script because for some reason i glazed over this and it just exists?
 
 	--create a janitor just in case anything related to the new velocity is destroyed (let it be the velocity itself or its parent)
 	local JanitorInstance = Janitor.new()
