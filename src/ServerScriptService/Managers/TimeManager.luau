@@ -26,7 +26,7 @@ local State: StringValue = ReplicatedStorage.RoundInfo.CurrentState
 local EnoughPlayers: BoolValue = ReplicatedStorage.RoundInfo.EnoughPlayers
 --
 function TimeManager:Init()
-    --print("FINISH TIMEMANAGER LATER >:(") --gotta save this line for memories lol
+    --print("FINISH TIMEMANAGER LATER >:(")
 
     TimeManager.FreezeTime = workspace:GetAttribute("FreezeTime")
     Utils.Instance.ObserveAttribute(workspace, "FreezeTime", function(value: boolean)
