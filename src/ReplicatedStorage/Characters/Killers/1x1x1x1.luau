@@ -8,22 +8,6 @@ local Types = require(ReplicatedStorage.Classes.Types)
 local Utils = require(ReplicatedStorage.Modules.Utils)
 local Sounds = require(ReplicatedStorage.Modules.Sounds)
 
---============================================================
--- NOTE ON THIS FILE
---============================================================
--- Cloned from Slasher's kit as a placeholder starting point (per request —
--- "reuse Slasher's kit for now, reskin later"). Mechanically identical:
--- same input-based Slash system (tap while moving -> Normal, tap after
--- standing still -> Heavy, hold through a windup -> Lunge). See Slasher.lua
--- for the full writeup of why the input/cooldown/hitbox handling works the
--- way it does below.
---
--- TODO when reskinning: Config.Render/Origin.Icon/AnimationIDs, the Slash
--- ability's RenderImage, and all three SwingConfigs animation IDs are still
--- Slasher's placeholders/assets — swap in 1x1x1x1-specific ones once they
--- exist, and consider whether the kit itself (damage/reach/lunge feel)
--- should diverge once there's a theme to build toward.
---============================================================
 
 local WINDUP_TIME = 0.5          -- how long you must hold M1 before Lunge fires
 local THROW_DURATION = 0.60      -- how long the throw lasts, direction locked at launch

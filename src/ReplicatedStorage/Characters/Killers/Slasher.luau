@@ -8,50 +8,8 @@ local Types = require(ReplicatedStorage.Classes.Types)
 local Utils = require(ReplicatedStorage.Modules.Utils)
 local Sounds = require(ReplicatedStorage.Modules.Sounds)
 
---============================================================
--- NOTE ON THIS REWORK — read before wiring this in
---============================================================
--- Which swing you get depends on HOW you press M1:
---   • Tap M1 while moving           -> Normal
---   • Tap M1 after standing still   -> Heavy  (must be still > STANDSTILL_THRESHOLD)
---   • Hold M1 past the windup       -> Lunge  (windup, then thrown forward in
---                                     a straight line — direction is locked
---                                     in at launch, no steering mid-dash)
---
--- This version was checked against the actual Dysymmetrical engine source
--- (ReplicatedStorage/Classes/Ability, Hitbox, and
--- StarterPlayerScripts/InputManager), which changed a few things from
--- earlier drafts:
---
---   1. INPUT: "Slash" is bound through a real InputAction (see
---      InputManager/InputActions.model.json), which has native Pressed/
---      Released signals — no need to poll raw UserInputService or guess at
---      which mouse button "M1" is.
---
---   2. COOLDOWN: Ability already has a full AttemptUse -> CanUse ->
---      SetOnCooldown pipeline that fires automatically on Pressed (see
---      Ability/init.luau lines ~305-338), independent of whatever
---      Behaviour() does. That's the *base* 2s cooldown here — it starts the
---      moment you press M1, gives you the real cooldown UI on the ability
---      icon for free, and blocks a second press client-side before it even
---      reaches the server. Because it fires at press-time, it must NOT be
---      re-checked when a Hold/Tap actually *resolves* later (after the
---      windup) — by then it's already active from the very press that led
---      here, so re-checking it would always incorrectly fail. Lunge gets
---      its own separate, longer cooldown (LUNGE_COOLDOWN) tracked manually,
---      since the engine only supports one cooldown per ability.
---
---   3. HITBOX REACH: Hitbox.New re-centers on the character's live CFrame
---      every 1/40s for its whole `Time` window by default — it's not a
---      single static spawn. During the Lunge that meant the hitbox kept
---      dragging along behind the character for the entire dash, sweeping a
---      hit zone way bigger than a normal swing. Passing a snapshotted
---      `CFrame` (captured once, right as the swing lands) keeps it anchored
---      to where the swing actually happened.
---============================================================
 
 local WINDUP_TIME = 0.5          -- how long you must hold M1 before Lunge fires
-local THROW_DURATION = 0.60      -- how long the throw lasts, direction locked at launch
 local STANDSTILL_THRESHOLD = 0.4 -- seconds stationary required for a tap to become Heavy
 local LUNGE_COOLDOWN = 5         -- separate, longer cooldown so Lunge specifically can't be spammed
 local ANIMATION_WINDUP_DELAY = 0.1 -- how long you must hold before the windup anim starts;
@@ -80,18 +38,12 @@ local SwingConfigs = {
 		Damage = 16,
 		HitboxSize = Vector3.new(5, 6, 4.5),
 		LungeForce = 110,
-		LungeDuration = THROW_DURATION,
+		LungeDuration = 0.60,
+		LungeAnimationTime = 0.25,
 	},
 }
 
---============================================================
--- Shared RemoteEvent — carries which swing a Tap/Hold resolved to. Looked
--- up lazily (see EnsureRemotes below), NOT at module top level: a top-level
--- WaitForChild here yields the instant anything require()s this file, and
--- this module can get required from contexts that can't tolerate a yield
--- (e.g. UI enumerating killers for a shop/select screen) — that caused a
--- cascade of unrelated client errors in an earlier draft.
---============================================================
+
 local Remotes = nil
 local RequestAttackRemote = nil
 
@@ -99,6 +51,7 @@ local function EnsureRemotes()
 	if RequestAttackRemote then
 		return
 	end
+
 
 	if RunService:IsServer() then
 		Remotes = ReplicatedStorage:FindFirstChild("SlasherRemotes")
@@ -120,9 +73,7 @@ local function EnsureRemotes()
 	end
 end
 
---============================================================
--- Server: standstill tracking
---============================================================
+
 -- Humanoid.MoveDirection replicates from the owning client, so the server
 -- can watch it directly to time how long the killer has been stationary.
 local function TrackStandstill(self: Types.Ability)
@@ -139,10 +90,10 @@ local function TrackStandstill(self: Types.Ability)
 	end))
 end
 
---============================================================
+
 -- Server: forward throw. Direction is captured once at launch and held for
 -- the whole throw — no steering mid-dash.
---============================================================
+
 local function ApplyThrow(self: Types.Ability, Force: number, Duration: number)
 	local HRP = self.OwnerProperties.HRP
 	local LaunchLookVector = HRP.CFrame.LookVector
@@ -170,9 +121,9 @@ local function ApplyThrow(self: Types.Ability, Force: number, Duration: number)
 	self:AddConnection(Connection)
 end
 
---============================================================
+
 -- Server: actually run a resolved swing (damage, hitbox, effects)
---============================================================
+
 local function ExecuteSwing(self: Types.Ability, SwingData)
 	local Character = self.OwnerProperties.Character
 	local HRP = self.OwnerProperties.HRP
@@ -209,9 +160,9 @@ local function ExecuteSwing(self: Types.Ability, SwingData)
 	end
 end
 
---============================================================
+
 -- Server: resolve what the client asked for ("Tap" or "Hold") into a swing
---============================================================
+
 local function HandleAttackRequest(self: Types.Ability, RequestType: string)
 	-- Deliberately NOT checking self:CanUse()/self.OnCooldown here — the
 	-- press that led to this resolution already put the ability on cooldown
@@ -250,12 +201,11 @@ local function HandleAttackRequest(self: Types.Ability, RequestType: string)
 	end
 end
 
---============================================================
 -- Client: input handling via the real "Slash" InputAction (Pressed/
 -- Released) instead of raw UserInputService — this is what the engine
 -- itself binds M1/gamepad/mobile touch controls to, so it works correctly
 -- across input methods instead of only keyboard mouse-left-click.
---============================================================
+
 local function PlayAnimation(self: Types.Ability, SwingData)
 	local Track = self.SwingTracks and self.SwingTracks[SwingData.Name]
 	if not Track then
@@ -382,9 +332,9 @@ local function ClientInputInit(self: Types.Ability)
 	end
 end
 
---============================================================
+
 -- Ability plumbing
---============================================================
+
 local function SlashExtraInit(self: Types.Ability)
 	EnsureRemotes()
 
@@ -441,15 +391,13 @@ local Slasher: Types.Killer = Character.CreateKiller({
 			Icon = "rbxassetid://118316894840539",
 		},
 
-		-- TODO: give Slasher his own movement animations, or he'll use the engine defaults.
 		AnimationIDs = {
 			IdleAnimation = "rbxassetid://73546288362576",
 			WalkAnimation = "rbxassetid://115621394601470",
 			RunAnimation = "rbxassetid://102981744469535",
 		},
 
-		-- TeleporterPrefab intentionally omitted — DataAnchor ability removed until
-		-- a teleport prop object is added as a child of this script.
+		
 	},
 
 	GameplayConfig = {
