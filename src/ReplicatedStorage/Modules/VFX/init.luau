@@ -162,39 +162,39 @@ local function emitAll(root: Instance, count: number)
 end
 
 local function createFallbackBurst(cf: CFrame, color: Color3?): Part
-	local p = Instance.new("Part")
-	p.Name = "VFXFallback"
-	p.Anchored = true
-	p.CanCollide = false
-	p.CanQuery = false
-	p.CanTouch = false
-	p.CastShadow = false
-	p.Material = Enum.Material.Neon
-	p.Color = color or Color3.fromRGB(255, 220, 120)
-	p.Size = Vector3.new(0.35, 0.35, 0.35)
-	p.CFrame = cf
-	p.Transparency = 0.35
+	local Part = Instance.new("Part")
+	Part.Name = "VFXFallback"
+	Part.Anchored = true
+	Part.CanCollide = false
+	Part.CanQuery = false
+	Part.CanTouch = false
+	Part.CastShadow = false
+	Part.Material = Enum.Material.Neon
+	Part.Color = color or Color3.fromRGB(255, 220, 120)
+	Part.Size = Vector3.new(0.35, 0.35, 0.35)
+	Part.CFrame = cf
+	Part.Transparency = 0.35
 
-	local pe = Instance.new("ParticleEmitter")
-	pe.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	pe.Rate = 0
-	pe.Enabled = false
-	pe.Lifetime = NumberRange.new(0.2, 0.35)
-	pe.Speed = NumberRange.new(3, 9)
-	pe.SpreadAngle = Vector2.new(180, 180)
-	pe.Size = NumberSequence.new({
+	local PartEmitter = Instance.new("ParticleEmitter")
+	PartEmitter.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	PartEmitter.Rate = 0
+	PartEmitter.Enabled = false
+	PartEmitter.Lifetime = NumberRange.new(0.2, 0.35)
+	PartEmitter.Speed = NumberRange.new(3, 9)
+	PartEmitter.SpreadAngle = Vector2.new(180, 180)
+	PartEmitter.Size = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 0.45),
 		NumberSequenceKeypoint.new(1, 0),
 	})
-	pe.Transparency = NumberSequence.new({
+	PartEmitter.Transparency = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 0.25),
 		NumberSequenceKeypoint.new(1, 1),
 	})
-	pe.LightEmission = 0.5
-	pe.RotSpeed = NumberRange.new(-30, 30)
-	pe.Parent = p
+	PartEmitter.LightEmission = 0.5
+	PartEmitter.RotSpeed = NumberRange.new(-30, 30)
+	PartEmitter.Parent = Part
 
-	return p
+	return Part
 end
 
 local function poolKey(templateName: string?): string
@@ -271,8 +271,8 @@ end
 
 local function debounceKey(presetName: string, cf: CFrame): string
 	-- quantize position so spam at same spot is limited
-	local p = cf.Position
-	return string.format("%s_%d_%d_%d", presetName, p.X // 4, p.Y // 4, p.Z // 4)
+	local Part = cf.Position
+	return string.format("%s_%d_%d_%d", presetName, Part.X // 4, Part.Y // 4, Part.Z // 4)
 end
 
 local function minDistToPlayers(pos: Vector3, fromPlayer: Player?): number
