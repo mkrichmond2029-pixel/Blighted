@@ -20,7 +20,6 @@ end
 
 --- ## DEPRECATED: use `Effect.GetDefaultSettings()` instead.
 --- Effect preset for customization.
-@deprecated
 function EffectType.GetDefaultEffect(): Types.Effect
     return EffectType.GetDefaultSettings()
 end

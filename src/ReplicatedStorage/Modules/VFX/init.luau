@@ -23,10 +23,10 @@ local Presets = require(script.Presets)
 -- Perf knobs
 
 local maxConcurrent = 24 -- hard cap of live world VFX
-local maxPerPreset = 6
-local poolSizePerTemplate = 8
-local defaultRange = 180 -- studs for client polish remote
-local minEmitInterval = 0.05 -- same preset+similar place debounce
+local MAX_PER_PRESET = 6
+local POOL_SIZE_PER_TEMPLATE = 8
+local DEFAULT_RANGE = 180 -- studs for client polish remote
+local MIN_EMIT_INTERVAL = 0.05 -- same preset+similar place debounce
 
 local QUALITY = {
 	High = { emitScale = 1.0, maxConcurrent = 24, range = 220 },
@@ -162,39 +162,39 @@ local function emitAll(root: Instance, count: number)
 end
 
 local function createFallbackBurst(cf: CFrame, color: Color3?): Part
-	local Part = Instance.new("Part")
-	Part.Name = "VFXFallback"
-	Part.Anchored = true
-	Part.CanCollide = false
-	Part.CanQuery = false
-	Part.CanTouch = false
-	Part.CastShadow = false
-	Part.Material = Enum.Material.Neon
-	Part.Color = color or Color3.fromRGB(255, 220, 120)
-	Part.Size = Vector3.new(0.35, 0.35, 0.35)
-	Part.CFrame = cf
-	Part.Transparency = 0.35
+	local P = Instance.new("Part")
+	P.Name = "VFXFallback"
+	P.Anchored = true
+	P.CanCollide = false
+	P.CanQuery = false
+	P.CanTouch = false
+	P.CastShadow = false
+	P.Material = Enum.Material.Neon
+	P.Color = color or Color3.fromRGB(255, 220, 120)
+	P.Size = Vector3.new(0.35, 0.35, 0.35)
+	P.CFrame = cf
+	P.Transparency = 0.35
 
-	local PartEmitter = Instance.new("ParticleEmitter")
-	PartEmitter.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	PartEmitter.Rate = 0
-	PartEmitter.Enabled = false
-	PartEmitter.Lifetime = NumberRange.new(0.2, 0.35)
-	PartEmitter.Speed = NumberRange.new(3, 9)
-	PartEmitter.SpreadAngle = Vector2.new(180, 180)
-	PartEmitter.Size = NumberSequence.new({
+	local pe = Instance.new("ParticleEmitter")
+	pe.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	pe.Rate = 0
+	pe.Enabled = false
+	pe.Lifetime = NumberRange.new(0.2, 0.35)
+	pe.Speed = NumberRange.new(3, 9)
+	pe.SpreadAngle = Vector2.new(180, 180)
+	pe.Size = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 0.45),
 		NumberSequenceKeypoint.new(1, 0),
 	})
-	PartEmitter.Transparency = NumberSequence.new({
+	pe.Transparency = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 0.25),
 		NumberSequenceKeypoint.new(1, 1),
 	})
-	PartEmitter.LightEmission = 0.5
-	PartEmitter.RotSpeed = NumberRange.new(-30, 30)
-	PartEmitter.Parent = Part
+	pe.LightEmission = 0.5
+	pe.RotSpeed = NumberRange.new(-30, 30)
+	pe.Parent = P
 
-	return Part
+	return P
 end
 
 local function poolKey(templateName: string?): string

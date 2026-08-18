@@ -9,9 +9,9 @@ local Types = require(ReplicatedStorage.Classes.Types)
 local Utils = require(ReplicatedStorage.Modules.Utils)
 local Sounds = require(ReplicatedStorage.Modules.Sounds)
 
---============================================================
+
 -- NOTE ON THIS FILE
---============================================================
+
 -- Slash uses the same input-based system built for Slasher: which swing you
 -- get depends on HOW you press M1 (tap while moving -> Normal, tap after
 -- standing still -> Heavy, hold through a windup -> Lunge). See Slasher.lua
@@ -41,7 +41,6 @@ local Sounds = require(ReplicatedStorage.Modules.Sounds)
 --      ability use (Ability/init.luau, PlayUseAnimationOnUse defaults to
 --      true). That field was just left blank before; it's filled in below
 --      with a TODO placeholder ID.
---============================================================
 
 local WINDUP_TIME = 0.5            -- how long you must hold M1 before Lunge fires
 local THROW_DURATION = 0.60        -- how long the Lunge throw lasts, direction locked at launch
@@ -81,22 +80,9 @@ local SwingConfigs = {
 		LungeDuration = THROW_DURATION,
 	},
 }
+=
 
---============================================================
--- Inject placeholder model — TODO: replace with a real model/mesh Instance
--- for "Script Injection". Never parented anywhere; Projectile.New clones it.
---============================================================
-local InjectionProjectileTemplate = Instance.new("Part")
-InjectionProjectileTemplate.Name = "ScriptInjection"
-InjectionProjectileTemplate.Shape = Enum.PartType.Ball
-InjectionProjectileTemplate.Size = Vector3.new(1, 1, 1)
-InjectionProjectileTemplate.Material = Enum.Material.Neon
-InjectionProjectileTemplate.BrickColor = BrickColor.new("Lime green")
-InjectionProjectileTemplate.CanCollide = false
-InjectionProjectileTemplate.CanQuery = false
-InjectionProjectileTemplate.CanTouch = false
-InjectionProjectileTemplate.CastShadow = false
-InjectionProjectileTemplate.Anchored = true
+local InjectionProjectileTemplate = Workspace:FindFirstChild("InjectionProjectileTemplate")
 
 -- DestroyOnCollision (see Projectile.luau) shapecasts specifically against a
 -- child named "CollisionBox" — without one, DestroyOnCollision is a silent
@@ -105,7 +91,7 @@ local InjectionCollisionBox = InjectionProjectileTemplate:Clone()
 InjectionCollisionBox.Name = "CollisionBox"
 InjectionCollisionBox.Parent = InjectionProjectileTemplate
 
---============================================================
+
 -- Shared RemoteEvent for Slash — carries which swing a Tap/Hold resolved
 -- to. Looked up lazily (see EnsureRemotes below), NOT at module top level:
 -- a top-level WaitForChild here yields the instant anything require()s this
@@ -140,9 +126,9 @@ local function EnsureRemotes()
 	end
 end
 
---============================================================
+
 -- Server: standstill tracking
---============================================================
+
 local function TrackStandstill(self: Types.Ability)
 	local Humanoid = self.OwnerProperties.Character:FindFirstChildOfClass("Humanoid")
 	if not Humanoid then
@@ -157,10 +143,9 @@ local function TrackStandstill(self: Types.Ability)
 	end))
 end
 
---============================================================
+
 -- Server: forward throw. Direction is captured once at launch and held for
 -- the whole throw — no steering mid-dash.
---============================================================
 local function ApplyThrow(self: Types.Ability, Force: number, Duration: number)
 	local HRP = self.OwnerProperties.HRP
 	local LaunchLookVector = HRP.CFrame.LookVector
@@ -188,9 +173,9 @@ local function ApplyThrow(self: Types.Ability, Force: number, Duration: number)
 	self:AddConnection(Connection)
 end
 
---============================================================
+
 -- Server: actually run a resolved swing (damage, hitbox, effects)
---============================================================
+
 local function ExecuteSwing(self: Types.Ability, SwingData)
 	local Character = self.OwnerProperties.Character
 	local HRP = self.OwnerProperties.HRP
@@ -271,10 +256,10 @@ local function HandleAttackRequest(self: Types.Ability, RequestType: string)
 	end
 end
 
---============================================================
+
 -- Client: input handling via the real "Slash" InputAction (Pressed/
 -- Released), falling back to raw mouse input if that can't be found.
---============================================================
+
 local function PlayAnimation(self: Types.Ability, SwingData)
 	local Track = self.SwingTracks and self.SwingTracks[SwingData.Name]
 	if not Track then
@@ -400,9 +385,9 @@ local function ClientInputInit(self: Types.Ability)
 	end
 end
 
---============================================================
+
 -- Slash ability plumbing
---============================================================
+
 local function SlashExtraInit(self: Types.Ability)
 	EnsureRemotes()
 
@@ -446,9 +431,7 @@ local function SlashBehaviour(_self: Types.Ability)
 	-- Released signals instead.
 end
 
---============================================================
 -- Inject (4th ability) — thrown projectile, buffs M1 damage on hit
---============================================================
 -- Server-only: uses the engine's own Projectile class. The buff is applied
 -- from the underlying Hitbox's `Connections.Hit` callback, so it only
 -- triggers on a confirmed hit against a survivor, never on a miss.
