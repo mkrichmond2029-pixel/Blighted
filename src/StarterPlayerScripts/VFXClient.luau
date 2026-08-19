@@ -1,6 +1,5 @@
 --[[
 	VFXClient.luau — lightweight polish only
-	Place: StarterPlayerScripts/VFXClient.luau
 
 	Server already replicates particles. Client only:
 	  - plays sounds for nearby events
