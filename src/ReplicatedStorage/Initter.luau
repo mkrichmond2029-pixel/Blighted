@@ -4,8 +4,8 @@ local Initter = {
 }
 
 function Initter:Init()
-    debug.setmemorycategory("DysNetworking")
-    self.CurrentlyInitting = "DysNetworking"
+    debug.setmemorycategory("Networking")
+    self.CurrentlyInitting = "Networking"
     require(script.Parent.Modules.Network):Init()
     for _, Module in ipairs(script.Parent.Modules:GetDescendants()) do
         if Module.Name == "Network" then
