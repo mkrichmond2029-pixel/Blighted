@@ -1,9 +1,11 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Debris = game:GetService("Debris")
 
 local Character = require(ReplicatedStorage.Classes.Character)
 local Ability = require(ReplicatedStorage.Classes.Ability)
-local Projectile = require(ReplicatedStorage.Classes.Projectile)
+local Hitbox = require(ReplicatedStorage.Classes.Hitbox)
 local Types = require(ReplicatedStorage.Classes.Types)
 local PlayerSpeedManager = RunService:IsServer() and require(game:GetService("ServerScriptService").Managers.PlayerManager.PlayerSpeedManager) or nil
 local PlayerSprintManager = RunService:IsServer() and require(game:GetService("ServerScriptService").Managers.PlayerManager.PlayerSprintManager) or nil
@@ -12,24 +14,25 @@ local ElliotState = {}
 ElliotState.__index = ElliotState
 
 function ElliotState.new(owner: Player, character: Model, charModule: Types.Survivor)
-	return setmetatable({ Owner = owner, Character = character, CharModule = charModule }, ElliotState)
+	return setmetatable({ Owner = owner, Character = character, CharModule = charModule, Kitchen = nil }, ElliotState)
 end
 
 function ElliotState:Folder()
 	local map = workspace:FindFirstChild("Map")
-	return map and map:FindFirstChild("InGame") or workspace:FindFirstChild("TempObjectFolders") or workspace
+	return (map and map:FindFirstChild("InGame")) or workspace:FindFirstChild("TempObjectFolders") or workspace
 end
 
 function ElliotState:WorkingKitchen()
 	local kitchen = self.Kitchen
-	local health = kitchen and kitchen:FindFirstChildWhichIsA("Humanoid")
+	local health = kitchen and kitchen:FindFirstChild("KitchenHealth")
 	return kitchen and kitchen.Parent and health and health.Health > 0 and not kitchen:GetAttribute("Broken") and kitchen
 end
 
 function ElliotState:KitchenNearby()
 	local kitchen = self:WorkingKitchen()
 	local root = self.Character:FindFirstChild("HumanoidRootPart")
-	return kitchen and root and kitchen.PrimaryPart and (root.Position - kitchen.PrimaryPart.Position).Magnitude <= 18
+	return kitchen ~= nil and root ~= nil and kitchen.PrimaryPart ~= nil
+		and (root.Position - kitchen.PrimaryPart.Position).Magnitude <= 18
 end
 
 function ElliotState:AddPizza(amount: number)
@@ -60,11 +63,6 @@ function ElliotState:CreateKitchen()
 	health.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 	health.Parent = model
 
-	local role = Instance.new("StringValue")
-	role.Name = "Role"
-	role.Value = "Survivor"
-	role.Parent = model
-
 	model.Parent = self:Folder()
 	self.Kitchen = model
 	health.HealthChanged:Connect(function(value)
@@ -84,10 +82,9 @@ function ElliotState:CreateKitchen()
 end
 
 function ElliotState:PlaceOrRepairKitchen()
-	local kitchen = self.Kitchen
-	if kitchen and kitchen.Parent then
-		if kitchen:GetAttribute("Broken") then
-			local health = kitchen:FindFirstChildWhichIsA("Humanoid")
+	if self.Kitchen and self.Kitchen.Parent then
+		if self.Kitchen:GetAttribute("Broken") then
+			local health = self.Kitchen:FindFirstChild("KitchenHealth")
 			if health then health.Health = health.MaxHealth end
 		end
 		return
@@ -102,56 +99,79 @@ function ElliotState:ThrowPizza()
 	local pizza = Instance.new("Part")
 	pizza.Name = "ElliotPizza"
 	pizza.Shape = Enum.PartType.Cylinder
-	pizza.Size = Vector3.new(0.35, 1.6, 1.6)
-	pizza.Color = Color3.fromRGB(255, 190, 65)
+	pizza.Size = Vector3.new(0.4, 1.8, 1.8)
+	pizza.Color = Color3.fromRGB(255, 170, 25)
 	pizza.Material = Enum.Material.Neon
 	pizza.CanCollide = false
+	pizza.CanTouch = false
 	pizza.Anchored = true
+	pizza.CFrame = root.CFrame * CFrame.new(0, 1, -3) * CFrame.Angles(0, 0, math.rad(90))
+	pizza.Parent = self:Folder()
 
 	local hit = false
-	local projectile
-	projectile = Projectile.New({
-		SourcePlayer = self.Owner,
-		Model = pizza,
-		StartingCFrame = root.CFrame * CFrame.new(0, 1, -2) * CFrame.Angles(0, 0, math.rad(90)),
-		Speed = 70,
-		Lifetime = 1.5,
-		DestroyOnCollision = true,
-		HitboxSettings = {
-			Size = Vector3.new(3, 3, 3),
-			Damage = 0,
-			FriendlyFire = true,
-			Reason = "Pizza Throw",
-			Connections = {
-				Hit = function(_, humanoid: Humanoid)
-					local target = humanoid.Parent
-					local role = target and target:FindFirstChild("Role")
-					if hit or not role or role.Value ~= "Survivor" then return end
-					hit = true
-					humanoid.Health = math.min(humanoid.MaxHealth, humanoid.Health + 10)
-					task.spawn(function()
-						for _ = 1, 5 do
-							task.wait(1)
-							if humanoid.Parent and humanoid.Health > 0 then
-								humanoid.Health = math.min(humanoid.MaxHealth, humanoid.Health + 3)
-							end
+	local start = pizza.CFrame
+	local goal = start * CFrame.new(0, 0, -105)
+	local projectileHitbox = Hitbox.New(self.Owner, {
+		CFrame = function() return pizza.CFrame end,
+		Size = Vector3.new(3, 3, 3),
+		Damage = 0,
+		FriendlyFire = true,
+		IsProjectile = true,
+		Reason = "Pizza Throw",
+		Time = 1.5,
+		Connections = {
+			Hit = function(_, humanoid: Humanoid)
+				local target = humanoid.Parent
+				local role = target and target:FindFirstChild("Role")
+				if hit or not role or role.Value ~= "Survivor" then return end
+				hit = true
+				humanoid.Health = math.min(humanoid.MaxHealth, humanoid.Health + 10)
+				task.spawn(function()
+					for _ = 1, 5 do
+						task.wait(1)
+						if humanoid.Parent and humanoid.Health > 0 then
+							humanoid.Health = math.min(humanoid.MaxHealth, humanoid.Health + 3)
 						end
-					end)
-					projectile:Destroy()
-				end,
-			},
+					end
+				end)
+				projectileHitbox:Cancel()
+				pizza:Destroy()
+			end,
 		},
 	})
+
+	local tween = TweenService:Create(pizza, TweenInfo.new(1.5, Enum.EasingStyle.Linear), { CFrame = goal })
+	tween:Play()
+	Debris:AddItem(pizza, 1.6)
 end
 
 function ElliotState:RideBike(ability: Types.Ability)
 	if not self:KitchenNearby() then return end
+
+	local root = self.Character:FindFirstChild("HumanoidRootPart")
+	local bike = Instance.new("Part")
+	bike.Name = "ElliotMotorBike"
+	bike.Size = Vector3.new(2.5, 1, 4)
+	bike.Color = Color3.fromRGB(35, 35, 35)
+	bike.Material = Enum.Material.Metal
+	bike.CanCollide = false
+	bike.Massless = true
+	bike.CFrame = root.CFrame * CFrame.new(0, -2, 0)
+	bike.Parent = self.Character
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = root
+	weld.Part1 = bike
+	weld.Parent = bike
+
 	local factor = "ElliotMotorBike"
 	local remaining = ability.Duration
+	local active = true
 	self.Character:SetAttribute("RidingMotorBike", true)
 	PlayerSpeedManager.AddSpeedFactor(self.Owner, factor, self.CharModule.GameplayConfig.SprintSpeedMultiplier * 1.4)
 	PlayerSprintManager.AddStaminaDrain(self.Owner, factor, 2)
+
 	ability:AddConnection(RunService.Heartbeat:Connect(function(delta)
+		if not active then return end
 		local attributes = self.Character:FindFirstChild("PlayerAttributes")
 		local stamina = attributes and attributes:FindFirstChild("Stamina")
 		remaining -= delta
@@ -160,9 +180,11 @@ function ElliotState:RideBike(ability: Types.Ability)
 			if stamina.Value <= 0 then remaining = 0 end
 		end
 		if remaining <= 0 then
+			active = false
 			PlayerSpeedManager.RemoveSpeedFactor(self.Owner, factor)
 			PlayerSprintManager.RemoveStaminaDrain(self.Owner, factor)
 			self.Character:SetAttribute("RidingMotorBike", false)
+			bike:Destroy()
 		end
 	end))
 end
@@ -194,7 +216,9 @@ local Elliot: Types.Survivor = Character.CreateSurvivor({
 			Kitchen = Ability.New({ Name = "Kitchen", InputName = "SecondAbility", Cooldown = 3, Duration = 1, Behaviour = KitchenBehaviour }),
 			MotorBike = Ability.New({
 				Name = "Motor Bike", InputName = "ThirdAbility", Cooldown = 12, Duration = 8,
-				UseConditions = function(self: Types.Ability) return self.CharModule.GameplayConfig.Cache.ElliotState:KitchenNearby() end,
+				UseConditions = function(self: Types.Ability)
+					return RunService:IsClient() or self.CharModule.GameplayConfig.Cache.ElliotState:KitchenNearby()
+				end,
 				Behaviour = BikeBehaviour,
 			}),
 		},
