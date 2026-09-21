@@ -9,7 +9,7 @@ local Types = require(ReplicatedStorage.Classes.Types)
 local CommonFunctions = RunService:IsServer() and require(game:GetService("ServerScriptService").System.CommonFunctions) or nil
 local PlayerSpeedManager = RunService:IsServer() and require(game:GetService("ServerScriptService").Managers.PlayerManager.PlayerSpeedManager) or nil
 local PlayerSprintManager = RunService:IsServer() and require(game:GetService("ServerScriptService").Managers.PlayerManager.PlayerSprintManager) or nil
-
+local KitchenModel = require(Workspace.CharacterAssets.Elliot.KitchenModel)
 local ANIM = {
 	Pizza = "rbxassetid://0",
 	Kitchen = "rbxassetid://0",
@@ -118,13 +118,11 @@ function ElliotState:CreateKitchen()
 	model.Name = "ElliotKitchen"
 	model:SetAttribute("Broken", false)
 
-	local counter = Instance.new("Part")
+	local counter = KitchenModel
 	counter.Name = "KitchenCounter"
 	counter.Size = Vector3.new(5, 2, 3)
 	counter.Anchored = true
 	counter.CanCollide = true
-	counter.Material = Enum.Material.Wood
-	counter.Color = Color3.fromRGB(190, 120, 55)
 	counter.CFrame = self.Character.HumanoidRootPart.CFrame * CFrame.new(0, -2, -5)
 	counter.Parent = model
 	model.PrimaryPart = counter
