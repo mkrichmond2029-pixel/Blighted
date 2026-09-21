@@ -23,6 +23,17 @@ if RunService:IsServer() then
 	end
 end
 
+local ScooterTemplate = nil
+if RunService:IsServer() then
+	local assets = workspace:FindFirstChild("CharacterAssets")
+		and workspace.CharacterAssets:FindFirstChild("Elliot")
+		and workspace.CharacterAssets.Elliot:FindFirstChild("ScooterModel")
+	if assets then
+		ScooterTemplate = assets:FindFirstChild("ScooterDefault")
+	end
+end
+
+
 local ANIM = {
 	Pizza = "rbxassetid://0",
 	Kitchen = "rbxassetid://0",
@@ -357,11 +368,8 @@ function ElliotState:CreateBike(root: BasePart)
 	local bike = Instance.new("Model")
 	bike.Name = "ElliotMotorBike"
 
-	local body = Instance.new("Part")
+	local body = ElliotScooter
 	body.Name = "Body"
-	body.Size = Vector3.new(2.5, 0.55, 4)
-	body.Color = Color3.fromRGB(35, 35, 35)
-	body.Material = Enum.Material.Metal
 	body.CanCollide = false
 	body.Massless = true
 	body.CFrame = root.CFrame * CFrame.new(0, -2, 0)
