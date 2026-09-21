@@ -8,7 +8,7 @@ local Hitbox = require(ReplicatedStorage.Classes.Hitbox)
 local Types = require(ReplicatedStorage.Classes.Types)
 local CommonFunctions = RunService:IsServer() and require(game:GetService("ServerScriptService").System.CommonFunctions) or nil
 local PlayerSpeedManager = RunService:IsServer() and require(game:GetService("ServerScriptService").Managers.PlayerManager.PlayerSpeedManager) or nil
-local PlayerSprintManager = RunService:IsServer() and require(game:GetService("ServerScriptService").Managers.PlayerManager.PlayerManager.PlayerSprintManager) or nil
+local PlayerSprintManager = RunService:IsServer() and require(game:GetService("ServerScriptService").Managers.PlayerManager.PlayerSprintManager) or nil
 
 local ANIM = {
 	Pizza = "rbxassetid://0",
