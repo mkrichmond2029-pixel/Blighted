@@ -17,13 +17,19 @@ local ProjectileDamage = 5
 local ProjectileOffset = CFrame.new(0, 1, -2)
 local ProjectileHitboxSize = Vector3.new(2.5, 2.5, 5)
 
+-- Slash Windup Configuration
+local SlashWindupDuration = 0.4
+
+-- Inject Windup Configuration
+local InjectWindupDuration = 0.5
+
 -- Passive #1 Configuration
 local CorruptionMaxStacks = 3
 local CorruptionWeaknessBase = 0.05 -- 5%
 local CorruptionWeaknessPerStack = 0.05 -- 5% per stack (so 3 stacks = 15%)
 local CorruptionDuration = 15
 
--- Passive #2 Configuration
+-- Passive #2 Configuration (M1 Hold Follow-up)
 local FollowUpTimeWindow = 0.8
 local FollowUpDamage = 8
 local FollowUpBurningDamage = 7
@@ -33,7 +39,9 @@ local FollowUpSlownessMissDuration = 2
 local FollowUpSlownessMissLevel = 3
 local FollowUpHitboxSize = Vector3.new(2, 2, 3.5) -- Skinny hitbox
 local FollowUpHitboxOffset = CFrame.new(0, 0, -2)
+local FollowUpDelay = 0.2 -- Delay before lunge executes
 
+-- Swappable Projectile Template (default is Script Injection)
 local InjectionProjectileTemplate = Instance.new("Part")
 InjectionProjectileTemplate.Name = "ScriptInjection"
 InjectionProjectileTemplate.Shape = Enum.PartType.Ball
@@ -100,76 +108,58 @@ local function ApplyInjectedBuff(self: Types.Ability, CharacterModel: Model)
 	end))
 end
 
--- Passive #2: Check if follow-up is available and execute
+-- Passive #2: Execute follow-up lunge when M1 is held
 local function ExecuteFollowUp(self: Types.Ability, CharacterModel: Model)
 	if RunService:IsServer() then
-		local LastM1Time = CharacterModel:GetAttribute("LastM1Time") or 0
-		local CurrentTime = tick()
-		
-		-- Check if M1 was used within the time window
-		if CurrentTime - LastM1Time <= FollowUpTimeWindow then
-			local FollowUpUsed = CharacterModel:GetAttribute("FollowUpUsed") or false
-			
-			if not FollowUpUsed then
-				CharacterModel:SetAttribute("FollowUpUsed", true)
-				
-				-- Execute lunge hitbox
-				task.delay(0.2, function() -- Small delay for lunge animation
-					if not CharacterModel.Parent or self.OwnerProperties.Humanoid.Health <= 0 then
-						return
-					end
-					
-					local HitOccurred = false
-					
-					Hitbox.New(self.Owner, {
-						CFrameOffset = FollowUpHitboxOffset,
-						Size = FollowUpHitboxSize,
-						Time = 0.3,
-						Damage = FollowUpDamage,
-						Reason = "Sword Follow-up",
-						ExecuteOnKill = true,
-						OnHit = function(Hit)
-							HitOccurred = true
-							local TargetCharacter = Hit.Parent
-							if TargetCharacter and TargetCharacter:FindFirstChild("Humanoid") then
-								-- Apply slowness on hit
-								TargetCharacter:SetAttribute("Slowed", true)
-								TargetCharacter:SetAttribute("SlowLevel", FollowUpSlownessHitLevel)
-								
-								task.delay(FollowUpSlownessHitDuration, function()
-									if TargetCharacter.Parent then
-										TargetCharacter:SetAttribute("Slowed", false)
-									end
-								end)
-								
-								-- Apply burning damage
-								task.delay(0.5, function()
-									if TargetCharacter.Parent and TargetCharacter:FindFirstChild("Humanoid") then
-										TargetCharacter.Humanoid:TakeDamage(FollowUpBurningDamage)
-									end
-								end)
-							end
-						end,
-					})
-				end)
+		-- Execute lunge hitbox with delay
+		task.delay(FollowUpDelay, function()
+			if not CharacterModel.Parent or self.OwnerProperties.Humanoid.Health <= 0 then
+				return
 			end
-		else
-			-- Miss case: apply slowness even without hit
-			CharacterModel:SetAttribute("Slowed", true)
-			CharacterModel:SetAttribute("SlowLevel", FollowUpSlownessMissLevel)
 			
-			task.delay(FollowUpSlownessMissDuration, function()
-				if CharacterModel.Parent then
-					CharacterModel:SetAttribute("Slowed", false)
-				end
-			end)
-		end
+			local HitOccurred = false
+			
+			Hitbox.New(self.Owner, {
+				CFrameOffset = FollowUpHitboxOffset,
+				Size = FollowUpHitboxSize,
+				Time = 0.3,
+				Damage = FollowUpDamage,
+				Reason = "Sword Follow-up",
+				ExecuteOnKill = true,
+				OnHit = function(Hit)
+					HitOccurred = true
+					local TargetCharacter = Hit.Parent
+					if TargetCharacter and TargetCharacter:FindFirstChild("Humanoid") then
+						-- Apply corruption
+						ApplyCorruption(TargetCharacter)
+						
+						-- Apply slowness on hit
+						TargetCharacter:SetAttribute("Slowed", true)
+						TargetCharacter:SetAttribute("SlowLevel", FollowUpSlownessHitLevel)
+						
+						task.delay(FollowUpSlownessHitDuration, function()
+							if TargetCharacter.Parent then
+								TargetCharacter:SetAttribute("Slowed", false)
+							end
+						end)
+						
+						-- Apply burning damage
+						task.delay(0.1, function()
+							if TargetCharacter.Parent and TargetCharacter:FindFirstChild("Humanoid") then
+								TargetCharacter.Humanoid:TakeDamage(FollowUpBurningDamage)
+							end
+						end)
+					end
+				end,
+			})
+		end)
 	end
 end
 
 local function DefaultSlashBehaviour(self: Types.Ability)
 	if RunService:IsServer() then
 		local CharacterModel = self.OwnerProperties.Character
+		local HRP = self.OwnerProperties.HRP
 		local Damage = self.Damage
 
 		if CharacterModel:GetAttribute("Injected") then
@@ -178,13 +168,15 @@ local function DefaultSlashBehaviour(self: Types.Ability)
 			CharacterModel:SetAttribute("Injected", false)
 		end
 
-		-- Track M1 time for Passive #2
+		-- Track M1 time for Passive #2 hold detection
 		CharacterModel:SetAttribute("LastM1Time", tick())
-		CharacterModel:SetAttribute("FollowUpUsed", false)
+		CharacterModel:SetAttribute("M1Active", true)
+		CharacterModel:SetAttribute("FollowUpTriggered", false)
 
-		Sounds.PlaySound(self.UseSound, { Parent = self.OwnerProperties.HRP })
-
-		task.delay(self.Delay, function()
+		Sounds.PlaySound(self.UseSound, { Parent = HRP })
+		
+		-- Windup delay before hitbox
+		task.delay(SlashWindupDuration, function()
 			if not CharacterModel.Parent or self.OwnerProperties.Humanoid.Health <= 0 then
 				return
 			end
@@ -211,6 +203,8 @@ local function DefaultSlashBehaviour(self: Types.Ability)
 					end
 				end,
 			})
+			
+			CharacterModel:SetAttribute("M1Active", false)
 		end)
 	else
 		self.OwnerProperties.TurnToMoveDirection:AddHeadPreventionFactor("Slash")
@@ -274,12 +268,27 @@ end
 
 local function InjectBehaviour(self: Types.Ability)
 	if RunService:IsServer() then
-		-- Windup delay before launching projectile
-		task.delay(self.WindupDelay, function()
-			if self.OwnerProperties.Character.Parent and self.OwnerProperties.Humanoid.Health > 0 then
+		local CharacterModel = self.OwnerProperties.Character
+		
+		-- Check if M1 is being held (within the follow-up window)
+		local LastM1Time = CharacterModel:GetAttribute("LastM1Time") or 0
+		local CurrentTime = tick()
+		local M1Active = CharacterModel:GetAttribute("M1Active") or false
+		local FollowUpTriggered = CharacterModel:GetAttribute("FollowUpTriggered") or false
+		
+		-- Windup delay before action
+		task.delay(InjectWindupDuration, function()
+			if not CharacterModel.Parent or self.OwnerProperties.Humanoid.Health <= 0 then
+				return
+			end
+			
+			-- If M1 was used recently and is still active, trigger follow-up instead of projectile
+			if CurrentTime - LastM1Time <= FollowUpTimeWindow and M1Active and not FollowUpTriggered then
+				CharacterModel:SetAttribute("FollowUpTriggered", true)
+				ExecuteFollowUp(self, CharacterModel)
+			else
+				-- Normal inject behavior: launch projectile
 				LaunchInjectionProjectile(self)
-				-- Trigger follow-up check
-				ExecuteFollowUp(self, self.OwnerProperties.Character)
 			end
 		end)
 	end
@@ -327,14 +336,13 @@ local C00lKidd: Types.Killer = Character.CreateKiller({
 				Duration = 2,
 				UseSound = "rbxassetid://0",
 				UseAnimation = "rbxassetid://112246584283940",
-				ProjectileModel = InjectionProjectileTemplate,
+				ProjectileModel = InjectionProjectileTemplate, -- SWAPPABLE: Replace with any prop Model
 				ProjectileSpeed = ProjectileSpeed,
 				ProjectileLifetime = ProjectileLifetime,
 				ProjectileSize = ProjectileHitboxSize,
 				ProjectileOffset = ProjectileOffset,
 				ProjectileDamage = ProjectileDamage,
 				BuffDuration = InjectedBuffDuration,
-				WindupDelay = 0.3, -- Windup before projectile launch
 				ApplyInjectedBuff = ApplyInjectedBuff,
 				Behaviour = InjectBehaviour,
 			}),
@@ -352,12 +360,12 @@ C00lKidd.Config.Description = {
 	{ Type = "Header", Text = "SLASH" },
 	{
 		Type = "Text",
-		Text = NameLabel .. " uses the standard Blighted Slash ability. Injected targets make his M1 attacks deal " .. tostring(InjectedDamageBonus) .. " additional damage.",
+		Text = NameLabel .. " performs a slash with a windup. Injected targets make his M1 attacks deal " .. tostring(InjectedDamageBonus) .. " additional damage.",
 	},
 	{ Type = "Header", Text = "INJECT" },
 	{
 		Type = "Text",
-		Text = NameLabel .. " throws a Script Injection projectile with a " .. tostring(0.3) .. "s windup. Hitting a Survivor buffs his slashes for " .. tostring(InjectedBuffDuration) .. " seconds.",
+		Text = NameLabel .. " throws a projectile with a " .. tostring(InjectWindupDuration) .. "s windup. If used within " .. tostring(FollowUpTimeWindow) .. "s while holding M1, triggers a sword follow-up lunge instead. Hitting with projectile buffs his slashes for " .. tostring(InjectedBuffDuration) .. " seconds.",
 	},
 	{ Type = "Separator", Text = "PASSIVES" },
 	{ Type = "Header", Text = "SCRIPT INJECTION" },
@@ -368,7 +376,7 @@ C00lKidd.Config.Description = {
 	{ Type = "Header", Text = "SWORD FOLLOW-UP" },
 	{
 		Type = "Text",
-		Text = "Within " .. tostring(FollowUpTimeWindow) .. "s after an M1, using Inject triggers a lunge with " .. tostring(FollowUpDamage) .. " damage + " .. tostring(FollowUpBurningDamage) .. " burning damage. On hit: Slowness " .. tostring(FollowUpSlownessHitLevel) .. " for " .. tostring(FollowUpSlownessHitDuration) .. "s. On miss: Slowness " .. tostring(FollowUpSlownessMissLevel) .. " for " .. tostring(FollowUpSlownessMissDuration) .. "s.",
+		Text = "While holding M1, using Inject within " .. tostring(FollowUpTimeWindow) .. "s triggers a lunge with " .. tostring(FollowUpDamage) .. " damage + " .. tostring(FollowUpBurningDamage) .. " burning damage. On hit: Slowness " .. tostring(FollowUpSlownessHitLevel) .. " for " .. tostring(FollowUpSlownessHitDuration) .. "s. On miss: Slowness " .. tostring(FollowUpSlownessMissLevel) .. " for " .. tostring(FollowUpSlownessMissDuration) .. "s.",
 	},
 }
 
