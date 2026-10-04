@@ -235,16 +235,11 @@ local function DefaultSlashBehaviour(self: Types.Ability)
 			})
 		end)
 
-		-- After M1 connects, check if player is still holding M1 and trigger follow-up automatically
+		-- After M1 connects, automatically trigger follow-up
 		task.delay(FollowUpAutoDelay, function()
 			if CharacterModel.Parent and not CharacterModel:GetAttribute("FollowUpTriggered") then
-				local UserInputService = game:GetService("UserInputService")
-				-- Check if M1 is still being held (adjust based on your input system)
-				-- This assumes you have a way to check if M1 input is active
-				if CharacterModel:GetAttribute("M1Held") then
-					CharacterModel:SetAttribute("FollowUpTriggered", true)
-					ExecuteFollowUp(self, CharacterModel)
-				end
+				CharacterModel:SetAttribute("FollowUpTriggered", true)
+				ExecuteFollowUp(self, CharacterModel)
 			end
 		end)
 
@@ -312,7 +307,7 @@ local function LaunchInjectionProjectile(self: Types.Ability)
 end
 
 -- ============================================================
--- INJECT (projectile OR follow-up)
+-- INJECT (projectile)
 -- ============================================================
 local function InjectBehaviour(self: Types.Ability)
 	if not RunService:IsServer() then return end
@@ -324,9 +319,25 @@ local function InjectBehaviour(self: Types.Ability)
 			return
 		end
 
-		-- Launch the projectile (simplified - no more follow-up check here)
+		-- Launch the projectile
 		LaunchInjectionProjectile(self)
 	end)
+end
+
+-- ============================================================
+-- ABILITY #3 PLACEHOLDER
+-- ============================================================
+local function Ability3Behaviour(self: Types.Ability)
+	-- TODO: Implement Ability 3
+	print("Ability 3 triggered - TODO: implement")
+end
+
+-- ============================================================
+-- ABILITY #4 PLACEHOLDER
+-- ============================================================
+local function Ability4Behaviour(self: Types.Ability)
+	-- TODO: Implement Ability 4
+	print("Ability 4 triggered - TODO: implement")
 end
 
 -- ============================================================
@@ -387,11 +398,35 @@ local C00lKidd: Types.Killer = Character.CreateKiller({
 				ApplyInjectedBuff = ApplyInjectedBuff,
 				Behaviour = InjectBehaviour,
 			}),
+
+			Ability3 = Ability.New({
+				Name = "Ability 3",
+				InputName = "SecondAbility",
+				Cooldown = 8,
+				Duration = 1,
+				UseSound = "rbxassetid://0",
+				UseAnimation = "rbxassetid://0",
+				RenderImage = "rbxassetid://0",
+				Behaviour = Ability3Behaviour,
+				-- TODO: Add ability-specific config values here
+			}),
+
+			Ability4 = Ability.New({
+				Name = "Ability 4",
+				InputName = "ThirdAbility",
+				Cooldown = 10,
+				Duration = 1.5,
+				UseSound = "rbxassetid://0",
+				UseAnimation = "rbxassetid://0",
+				RenderImage = "rbxassetid://0",
+				Behaviour = Ability4Behaviour,
+				-- TODO: Add ability-specific config values here
+			}),
 		},
 	},
 })
 
--- Description (unchanged logic, just kept for completeness)
+-- Description
 local NameLabel = '<font color="rgb(0, 255, 0)">' .. C00lKidd.Config.Name .. "</font>"
 C00lKidd.Config.Description = {
 	{ Type = "Separator", Text = "GENERAL INFO" },
@@ -409,6 +444,16 @@ C00lKidd.Config.Description = {
 		Type = "Text",
 		Text = NameLabel .. " throws a projectile with a " .. tostring(InjectWindupDuration) .. "s windup. Hitting with projectile buffs his slashes for " .. tostring(InjectedBuffDuration) .. " seconds.",
 	},
+	{ Type = "Header", Text = "ABILITY 3" },
+	{
+		Type = "Text",
+		Text = "TODO: Add Ability 3 description.",
+	},
+	{ Type = "Header", Text = "ABILITY 4" },
+	{
+		Type = "Text",
+		Text = "TODO: Add Ability 4 description.",
+	},
 	{ Type = "Separator", Text = "PASSIVES" },
 	{ Type = "Header", Text = "SCRIPT INJECTION" },
 	{
@@ -418,7 +463,7 @@ C00lKidd.Config.Description = {
 	{ Type = "Header", Text = "SWORD FOLLOW-UP" },
 	{
 		Type = "Text",
-		Text = "While holding M1, a follow-up lunge automatically triggers after " .. tostring(FollowUpAutoDelay) .. "s with " .. tostring(FollowUpDamage) .. " damage + " .. tostring(FollowUpBurningDamage) .. " burning damage. On hit: Slowness " .. tostring(FollowUpSlownessHitLevel) .. " for " .. tostring(FollowUpSlownessHitDuration) .. "s. On miss: Slowness " .. tostring(FollowUpSlownessMissLevel) .. " for " .. tostring(FollowUpSlownessMissDuration) .. "s.",
+		Text = "After slashing, a follow-up lunge automatically triggers after " .. tostring(FollowUpAutoDelay) .. "s with " .. tostring(FollowUpDamage) .. " damage + " .. tostring(FollowUpBurningDamage) .. " burning damage. On hit: Slowness " .. tostring(FollowUpSlownessHitLevel) .. " for " .. tostring(FollowUpSlownessHitDuration) .. "s. On miss: Slowness " .. tostring(FollowUpSlownessMissLevel) .. " for " .. tostring(FollowUpSlownessMissDuration) .. "s.",
 	},
 }
 
