@@ -126,15 +126,30 @@ end
 local function ExecuteFollowUp(self: Types.Ability, CharacterModel: Model)
 	if not RunService:IsServer() then return end
 
+	print("[FollowUp] ExecuteFollowUp triggered!")
+
 	local HitOccurred = false
 	local CharacterStats = CharacterModel:FindFirstChild("Stats")
-	if not CharacterStats then return end
+	
+	if not CharacterStats then
+		print("[FollowUp] WARNING: Stats not found on character. Checking for alternative...")
+		-- Debug: print all children of the character
+		for _, child in ipairs(CharacterModel:GetChildren()) do
+			print("[FollowUp] Character child:", child.Name)
+		end
+		return
+	end
+
+	print("[FollowUp] Stats found, applying sprint multiplier")
 
 	-- Get the original sprint speed
 	local OriginalSprintSpeed = CharacterStats:GetAttribute("SprintSpeed") or 30
+	print("[FollowUp] Original sprint speed:", OriginalSprintSpeed)
 
 	-- Apply sprint multiplier for the duration
-	CharacterStats:SetAttribute("SprintSpeed", OriginalSprintSpeed * FollowUpSprintMultiplier)
+	local NewSprintSpeed = OriginalSprintSpeed * FollowUpSprintMultiplier
+	CharacterStats:SetAttribute("SprintSpeed", NewSprintSpeed)
+	print("[FollowUp] Applied new sprint speed:", NewSprintSpeed)
 
 	-- Create hitbox during the lunge
 	Hitbox.New(self.Owner, {
@@ -146,6 +161,7 @@ local function ExecuteFollowUp(self: Types.Ability, CharacterModel: Model)
 		ExecuteOnKill = true,
 		OnHit = function(Hit)
 			HitOccurred = true
+			print("[FollowUp] Hit detected!")
 			local TargetCharacter = Hit.Parent
 			if TargetCharacter and TargetCharacter:FindFirstChild("Humanoid") then
 				ApplyCorruption(TargetCharacter)
@@ -172,10 +188,12 @@ local function ExecuteFollowUp(self: Types.Ability, CharacterModel: Model)
 	-- After lunge duration, restore original sprint speed and apply miss slowness if no hit
 	task.delay(FollowUpDuration, function()
 		if CharacterModel.Parent and CharacterStats then
+			print("[FollowUp] Restoring original sprint speed:", OriginalSprintSpeed)
 			CharacterStats:SetAttribute("SprintSpeed", OriginalSprintSpeed)
 
 			-- Miss slowness (applied to the killer if nothing was hit)
 			if not HitOccurred then
+				print("[FollowUp] No hit occurred, applying miss slowness")
 				CharacterModel:SetAttribute("Slowed", true)
 				CharacterModel:SetAttribute("SlowLevel", FollowUpSlownessMissLevel)
 				task.delay(FollowUpSlownessMissDuration, function()
@@ -237,9 +255,13 @@ local function DefaultSlashBehaviour(self: Types.Ability)
 
 		-- After M1 connects, automatically trigger follow-up
 		task.delay(FollowUpAutoDelay, function()
+			print("[Slash] Checking follow-up trigger...")
 			if CharacterModel.Parent and not CharacterModel:GetAttribute("FollowUpTriggered") then
+				print("[Slash] Follow-up conditions met, triggering!")
 				CharacterModel:SetAttribute("FollowUpTriggered", true)
 				ExecuteFollowUp(self, CharacterModel)
+			else
+				print("[Slash] Follow-up not triggered - Parent exists:", CharacterModel.Parent ~= nil, "FollowUpTriggered:", CharacterModel:GetAttribute("FollowUpTriggered"))
 			end
 		end)
 
