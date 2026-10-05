@@ -1,5 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+
 local Character = require(ReplicatedStorage.Classes.Character)
 local Ability = require(ReplicatedStorage.Classes.Ability)
 local Hitbox = require(ReplicatedStorage.Classes.Hitbox)
@@ -30,23 +31,22 @@ local CorruptionWeaknessPerStack = 0.05
 local CorruptionDuration = 15
 
 -- Passive #2 (M1 → Follow-up auto-trigger)
-local FollowUpAutoDelay = 0.35              -- Delay before auto-triggering follow-up after M1
-local FollowUpSprintMultiplier = 2.5        -- How much to multiply sprint speed during lunge
-local FollowUpDuration = 0.5                -- How long the lunge lasts
+local FollowUpTimeWindow = 0.8                        -- Time window to click M1 again for follow-up
+local FollowUpSprintMultiplier = 2.3
+local FollowUpDuration = 0.65
 local FollowUpDamage = 8
 local FollowUpBurningDamage = 7
 local FollowUpSlownessHitDuration = 3
 local FollowUpSlownessHitLevel = 2
 local FollowUpSlownessMissDuration = 2
 local FollowUpSlownessMissLevel = 3
-local FollowUpHitboxSize = Vector3.new(2, 2, 3.5)
-local FollowUpHitboxOffset = CFrame.new(0, 0, -2)
+local FollowUpHitboxSize = Vector3.new(4, 4, 5.5)
+local FollowUpHitboxOffset = CFrame.new(0, 0, -2.5)
+local FollowUpAnimation = "rbxassetid://128861543254523"
 
 -- ============================================================
 -- PROJECTILE MODEL (EASIEST PLACE TO SWAP)
 -- ============================================================
--- Just replace the entire contents of this function with any Model you want.
--- Keep the name "ScriptInjection" if you like, or change it.
 local function CreateInjectionProjectileTemplate(): Model
 	local model = Instance.new("Model")
 	model.Name = "ScriptInjection"
@@ -64,7 +64,6 @@ local function CreateInjectionProjectileTemplate(): Model
 	ball.Anchored = true
 	ball.Parent = model
 
-	-- Optional collision / visual box (many systems use this)
 	local collisionBox = Instance.new("Part")
 	collisionBox.Name = "CollisionBox"
 	collisionBox.Size = Vector3.new(1.5, 1.5, 3)
@@ -85,6 +84,7 @@ end
 local function ApplyCorruption(TargetCharacter: Model)
 	local CurrentStacks = (TargetCharacter:GetAttribute("CorruptionStacks") or 0)
 	local NewStacks = math.min(CurrentStacks + 1, CorruptionMaxStacks)
+
 	TargetCharacter:SetAttribute("CorruptionStacks", NewStacks)
 	TargetCharacter:SetAttribute("CorruptionActive", true)
 
@@ -103,6 +103,7 @@ local function GetCorruptionWeakness(TargetCharacter: Model): number
 	if not TargetCharacter:GetAttribute("CorruptionActive") then
 		return 1.0
 	end
+
 	local Stacks = TargetCharacter:GetAttribute("CorruptionStacks") or 0
 	local WeaknessMultiplier = CorruptionWeaknessBase + (CorruptionWeaknessPerStack * (Stacks - 1))
 	return 1.0 + WeaknessMultiplier
@@ -110,6 +111,7 @@ end
 
 local function ApplyInjectedBuff(self: Types.Ability, CharacterModel: Model)
 	CharacterModel:SetAttribute("Injected", true)
+
 	local Token = (CharacterModel:GetAttribute("InjectedToken") or 0) + 1
 	CharacterModel:SetAttribute("InjectedToken", Token)
 
@@ -121,37 +123,32 @@ local function ApplyInjectedBuff(self: Types.Ability, CharacterModel: Model)
 end
 
 -- ============================================================
--- FOLLOW-UP LUNGE (Sprint-based movement)
+-- FOLLOW-UP LUNGE
 -- ============================================================
 local function ExecuteFollowUp(self: Types.Ability, CharacterModel: Model)
 	if not RunService:IsServer() then return end
 
-	print("[FollowUp] ExecuteFollowUp triggered!")
+	local Humanoid = self.OwnerProperties.Humanoid
+	local HRP = self.OwnerProperties.HRP
+	if not Humanoid or not HRP then return end
 
 	local HitOccurred = false
-	local CharacterStats = CharacterModel:FindFirstChild("Stats")
-	
-	if not CharacterStats then
-		print("[FollowUp] WARNING: Stats not found on character. Checking for alternative...")
-		-- Debug: print all children of the character
-		for _, child in ipairs(CharacterModel:GetChildren()) do
-			print("[FollowUp] Character child:", child.Name)
-		end
-		return
+	local OriginalSpeed = Humanoid.WalkSpeed or 16
+
+	-- Play follow-up animation
+	if FollowUpAnimation and FollowUpAnimation ~= "rbxassetid://0" then
+		local anim = Instance.new("Animation")
+		anim.AnimationId = FollowUpAnimation
+		local track = Humanoid:LoadAnimation(anim)
+		track:Play()
+		track.Stopped:Once(function()
+			anim:Destroy()
+		end)
 	end
 
-	print("[FollowUp] Stats found, applying sprint multiplier")
+	-- Boost WalkSpeed (player can turn naturally now)
+	Humanoid.WalkSpeed = OriginalSpeed * FollowUpSprintMultiplier
 
-	-- Get the original sprint speed
-	local OriginalSprintSpeed = CharacterStats:GetAttribute("SprintSpeed") or 30
-	print("[FollowUp] Original sprint speed:", OriginalSprintSpeed)
-
-	-- Apply sprint multiplier for the duration
-	local NewSprintSpeed = OriginalSprintSpeed * FollowUpSprintMultiplier
-	CharacterStats:SetAttribute("SprintSpeed", NewSprintSpeed)
-	print("[FollowUp] Applied new sprint speed:", NewSprintSpeed)
-
-	-- Create hitbox during the lunge
 	Hitbox.New(self.Owner, {
 		CFrameOffset = FollowUpHitboxOffset,
 		Size = FollowUpHitboxSize,
@@ -161,21 +158,20 @@ local function ExecuteFollowUp(self: Types.Ability, CharacterModel: Model)
 		ExecuteOnKill = true,
 		OnHit = function(Hit)
 			HitOccurred = true
-			print("[FollowUp] Hit detected!")
 			local TargetCharacter = Hit.Parent
+
 			if TargetCharacter and TargetCharacter:FindFirstChild("Humanoid") then
 				ApplyCorruption(TargetCharacter)
 
-				-- Slowness on hit
 				TargetCharacter:SetAttribute("Slowed", true)
 				TargetCharacter:SetAttribute("SlowLevel", FollowUpSlownessHitLevel)
+
 				task.delay(FollowUpSlownessHitDuration, function()
 					if TargetCharacter.Parent then
 						TargetCharacter:SetAttribute("Slowed", false)
 					end
 				end)
 
-				-- Burning damage
 				task.delay(0.1, function()
 					if TargetCharacter.Parent and TargetCharacter:FindFirstChild("Humanoid") then
 						TargetCharacter.Humanoid:TakeDamage(FollowUpBurningDamage)
@@ -185,23 +181,20 @@ local function ExecuteFollowUp(self: Types.Ability, CharacterModel: Model)
 		end,
 	})
 
-	-- After lunge duration, restore original sprint speed and apply miss slowness if no hit
 	task.delay(FollowUpDuration, function()
-		if CharacterModel.Parent and CharacterStats then
-			print("[FollowUp] Restoring original sprint speed:", OriginalSprintSpeed)
-			CharacterStats:SetAttribute("SprintSpeed", OriginalSprintSpeed)
+		if CharacterModel.Parent and self.OwnerProperties.Humanoid then
+			self.OwnerProperties.Humanoid.WalkSpeed = OriginalSpeed
+		end
 
-			-- Miss slowness (applied to the killer if nothing was hit)
-			if not HitOccurred then
-				print("[FollowUp] No hit occurred, applying miss slowness")
-				CharacterModel:SetAttribute("Slowed", true)
-				CharacterModel:SetAttribute("SlowLevel", FollowUpSlownessMissLevel)
-				task.delay(FollowUpSlownessMissDuration, function()
-					if CharacterModel.Parent then
-						CharacterModel:SetAttribute("Slowed", false)
-					end
-				end)
-			end
+		if not HitOccurred then
+			CharacterModel:SetAttribute("Slowed", true)
+			CharacterModel:SetAttribute("SlowLevel", FollowUpSlownessMissLevel)
+
+			task.delay(FollowUpSlownessMissDuration, function()
+				if CharacterModel.Parent then
+					CharacterModel:SetAttribute("Slowed", false)
+				end
+			end)
 		end
 	end)
 end
@@ -217,12 +210,13 @@ local function DefaultSlashBehaviour(self: Types.Ability)
 
 		if CharacterModel:GetAttribute("Injected") then
 			Damage += self.InjectedDamageBonus
-			CharacterModel:SetAttribute("Injected", false) -- consume buff
+			CharacterModel:SetAttribute("Injected", false)
 		end
 
-		-- Flag that M1 is active and can trigger follow-up
-		CharacterModel:SetAttribute("M1Active", true)
-		CharacterModel:SetAttribute("FollowUpTriggered", false)
+		-- Record the time this M1 was triggered
+		local M1TriggerTime = tick()
+		CharacterModel:SetAttribute("LastM1Time", M1TriggerTime)
+		CharacterModel:SetAttribute("M1FollowUpTriggered", false)
 
 		Sounds.PlaySound(self.UseSound, { Parent = HRP })
 
@@ -253,22 +247,10 @@ local function DefaultSlashBehaviour(self: Types.Ability)
 			})
 		end)
 
-		-- After M1 connects, automatically trigger follow-up
-		task.delay(FollowUpAutoDelay, function()
-			print("[Slash] Checking follow-up trigger...")
-			if CharacterModel.Parent and not CharacterModel:GetAttribute("FollowUpTriggered") then
-				print("[Slash] Follow-up conditions met, triggering!")
-				CharacterModel:SetAttribute("FollowUpTriggered", true)
-				ExecuteFollowUp(self, CharacterModel)
-			else
-				print("[Slash] Follow-up not triggered - Parent exists:", CharacterModel.Parent ~= nil, "FollowUpTriggered:", CharacterModel:GetAttribute("FollowUpTriggered"))
-			end
-		end)
-
-		-- Keep M1Active flag for a short window
-		task.delay(0.35, function()
+		-- Keep the window open for follow-up
+		task.delay(FollowUpTimeWindow, function()
 			if CharacterModel.Parent then
-				CharacterModel:SetAttribute("M1Active", false)
+				CharacterModel:SetAttribute("LastM1Time", 0)
 			end
 		end)
 	else
@@ -292,7 +274,7 @@ local function LaunchInjectionProjectile(self: Types.Ability)
 
 	ProjectileInstance = Projectile.New({
 		SourcePlayer = self.Owner,
-		Model = self.ProjectileModel,               -- this is now a Model
+		Model = self.ProjectileModel,
 		StartingCFrame = RootPart.CFrame * self.ProjectileOffset,
 		Speed = self.ProjectileSpeed,
 		Lifetime = self.ProjectileLifetime,
@@ -341,7 +323,6 @@ local function InjectBehaviour(self: Types.Ability)
 			return
 		end
 
-		-- Launch the projectile
 		LaunchInjectionProjectile(self)
 	end)
 end
@@ -350,15 +331,29 @@ end
 -- ABILITY #3 PLACEHOLDER
 -- ============================================================
 local function Ability3Behaviour(self: Types.Ability)
-	-- TODO: Implement Ability 3
-	print("Ability 3 triggered - TODO: implement")
+	if RunService:IsServer() then
+		local CharacterModel = self.OwnerProperties.Character
+		
+		-- Check if we're within the follow-up window from the last M1
+		local LastM1Time = CharacterModel:GetAttribute("LastM1Time") or 0
+		local TimeSinceM1 = tick() - LastM1Time
+		
+		if TimeSinceM1 <= FollowUpTimeWindow and not CharacterModel:GetAttribute("M1FollowUpTriggered") then
+			-- This is a follow-up M1!
+			CharacterModel:SetAttribute("M1FollowUpTriggered", true)
+			CharacterModel:SetAttribute("LastM1Time", 0) -- Clear the window
+			ExecuteFollowUp(self, CharacterModel)
+		else
+			-- Regular ability or outside window
+			print("Ability 3 triggered - TODO: implement regular ability")
+		end
+	end
 end
 
 -- ============================================================
 -- ABILITY #4 PLACEHOLDER
 -- ============================================================
 local function Ability4Behaviour(self: Types.Ability)
-	-- TODO: Implement Ability 4
 	print("Ability 4 triggered - TODO: implement")
 end
 
@@ -382,6 +377,7 @@ local C00lKidd: Types.Killer = Character.CreateKiller({
 			RunAnimation = "rbxassetid://102981744469535",
 		},
 	},
+
 	GameplayConfig = {
 		Abilities = {
 			Slash = Ability.New({
@@ -389,7 +385,7 @@ local C00lKidd: Types.Killer = Character.CreateKiller({
 				InputName = "Slash",
 				Cooldown = 2,
 				Duration = 0.4,
-				Damage = 20,
+				Damage = 12,
 				RenderImage = "rbxassetid://11218451110",
 				UseSound = "rbxassetid://12222200",
 				UseAnimation = "rbxassetid://94664389390904",
@@ -408,9 +404,7 @@ local C00lKidd: Types.Killer = Character.CreateKiller({
 				Duration = 2,
 				UseSound = "rbxassetid://0",
 				UseAnimation = "rbxassetid://110200320368434",
-
-				-- ★★★ SWAP THE MODEL HERE ★★★
-				ProjectileModel = CreateInjectionProjectileTemplate(),  -- or just put any Model
+				ProjectileModel = CreateInjectionProjectileTemplate(),
 				ProjectileSpeed = ProjectileSpeed,
 				ProjectileLifetime = ProjectileLifetime,
 				ProjectileSize = ProjectileHitboxSize,
@@ -424,13 +418,12 @@ local C00lKidd: Types.Killer = Character.CreateKiller({
 			Ability3 = Ability.New({
 				Name = "Ability 3",
 				InputName = "SecondAbility",
-				Cooldown = 8,
+				Cooldown = 0.5,
 				Duration = 1,
 				UseSound = "rbxassetid://0",
 				UseAnimation = "rbxassetid://0",
 				RenderImage = "rbxassetid://0",
 				Behaviour = Ability3Behaviour,
-				-- TODO: Add ability-specific config values here
 			}),
 
 			Ability4 = Ability.New({
@@ -442,7 +435,6 @@ local C00lKidd: Types.Killer = Character.CreateKiller({
 				UseAnimation = "rbxassetid://0",
 				RenderImage = "rbxassetid://0",
 				Behaviour = Ability4Behaviour,
-				-- TODO: Add ability-specific config values here
 			}),
 		},
 	},
@@ -450,42 +442,51 @@ local C00lKidd: Types.Killer = Character.CreateKiller({
 
 -- Description
 local NameLabel = '<font color="rgb(0, 255, 0)">' .. C00lKidd.Config.Name .. "</font>"
+
 C00lKidd.Config.Description = {
 	{ Type = "Separator", Text = "GENERAL INFO" },
 	{ Type = "Header", Text = C00lKidd.Config.Name:upper() },
 	{ Type = "Quote", Text = '"' .. C00lKidd.Config.Quote .. '"' },
 	{ Type = "Text", Text = "TODO: write C00lKidd's lore paragraph here." },
+
 	{ Type = "Separator", Text = "ABILITIES" },
+
 	{ Type = "Header", Text = "SLASH" },
 	{
 		Type = "Text",
 		Text = NameLabel .. " performs a slash with a windup. Injected targets make his M1 attacks deal " .. tostring(InjectedDamageBonus) .. " additional damage.",
 	},
+
 	{ Type = "Header", Text = "INJECT" },
 	{
 		Type = "Text",
 		Text = NameLabel .. " throws a projectile with a " .. tostring(InjectWindupDuration) .. "s windup. Hitting with projectile buffs his slashes for " .. tostring(InjectedBuffDuration) .. " seconds.",
 	},
+
 	{ Type = "Header", Text = "ABILITY 3" },
 	{
 		Type = "Text",
-		Text = "TODO: Add Ability 3 description.",
+		Text = "Click within " .. tostring(FollowUpTimeWindow) .. "s of your last M1 to trigger a follow-up lunge.",
 	},
+
 	{ Type = "Header", Text = "ABILITY 4" },
 	{
 		Type = "Text",
 		Text = "TODO: Add Ability 4 description.",
 	},
+
 	{ Type = "Separator", Text = "PASSIVES" },
+
 	{ Type = "Header", Text = "SCRIPT INJECTION" },
 	{
 		Type = "Text",
 		Text = "Victims hit by " .. NameLabel .. "'s slashes gain corruption stacks (max " .. tostring(CorruptionMaxStacks) .. "). Each stack grants " .. tostring(math.floor(CorruptionWeaknessBase * 100)) .. "% weakness, scaling up to " .. tostring(math.floor(CorruptionWeaknessBase * 100 * CorruptionMaxStacks)) .. "%. The M1 buff is removed after a single M1 but corruption persists.",
 	},
+
 	{ Type = "Header", Text = "SWORD FOLLOW-UP" },
 	{
 		Type = "Text",
-		Text = "After slashing, a follow-up lunge automatically triggers after " .. tostring(FollowUpAutoDelay) .. "s with " .. tostring(FollowUpDamage) .. " damage + " .. tostring(FollowUpBurningDamage) .. " burning damage. On hit: Slowness " .. tostring(FollowUpSlownessHitLevel) .. " for " .. tostring(FollowUpSlownessHitDuration) .. "s. On miss: Slowness " .. tostring(FollowUpSlownessMissLevel) .. " for " .. tostring(FollowUpSlownessMissDuration) .. "s.",
+		Text = "After slashing, click Ability 3 within " .. tostring(FollowUpTimeWindow) .. "s to trigger a follow-up lunge with " .. tostring(FollowUpDamage) .. " damage + " .. tostring(FollowUpBurningDamage) .. " burning damage. On hit: Slowness " .. tostring(FollowUpSlownessHitLevel) .. " for " .. tostring(FollowUpSlownessHitDuration) .. "s. On miss: Slowness " .. tostring(FollowUpSlownessMissLevel) .. " for " .. tostring(FollowUpSlownessMissDuration) .. "s.",
 	},
 }
 
