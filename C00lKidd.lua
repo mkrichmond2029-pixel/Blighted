@@ -10,7 +10,7 @@ local Utils = require(ReplicatedStorage.Modules.Utils)
 local Sounds = require(ReplicatedStorage.Modules.Sounds)
 
 -- ============================================================
--- CONFIG (tweak these freely)
+-- CONFIG
 -- ============================================================
 local InjectedDamageBonus = 8
 local InjectedBuffDuration = 12
@@ -24,14 +24,13 @@ local ProjectileHitboxSize = Vector3.new(2.5, 2.5, 5)
 local SlashWindupDuration = 0.01
 local InjectWindupDuration = 0.5
 
--- Passive #1
 local CorruptionMaxStacks = 3
 local CorruptionWeaknessBase = 0.05
 local CorruptionWeaknessPerStack = 0.05
 local CorruptionDuration = 15
 
--- Passive #2 (M1 → Follow-up auto-trigger)
-local FollowUpTimeWindow = 0.8                        -- Time window to click M1 again for follow-up
+-- Combo window: second M1 after first M1 triggers follow-up
+local FollowUpTimeWindow = 0.8
 local FollowUpSprintMultiplier = 2.3
 local FollowUpDuration = 0.65
 local FollowUpDamage = 8
@@ -45,7 +44,7 @@ local FollowUpHitboxOffset = CFrame.new(0, 0, -2.5)
 local FollowUpAnimation = "rbxassetid://128861543254523"
 
 -- ============================================================
--- PROJECTILE MODEL (EASIEST PLACE TO SWAP)
+-- PROJECTILE MODEL
 -- ============================================================
 local function CreateInjectionProjectileTemplate(): Model
 	local model = Instance.new("Model")
@@ -84,7 +83,6 @@ end
 local function ApplyCorruption(TargetCharacter: Model)
 	local CurrentStacks = (TargetCharacter:GetAttribute("CorruptionStacks") or 0)
 	local NewStacks = math.min(CurrentStacks + 1, CorruptionMaxStacks)
-
 	TargetCharacter:SetAttribute("CorruptionStacks", NewStacks)
 	TargetCharacter:SetAttribute("CorruptionActive", true)
 
@@ -111,7 +109,6 @@ end
 
 local function ApplyInjectedBuff(self: Types.Ability, CharacterModel: Model)
 	CharacterModel:SetAttribute("Injected", true)
-
 	local Token = (CharacterModel:GetAttribute("InjectedToken") or 0) + 1
 	CharacterModel:SetAttribute("InjectedToken", Token)
 
@@ -120,6 +117,49 @@ local function ApplyInjectedBuff(self: Types.Ability, CharacterModel: Model)
 			CharacterModel:SetAttribute("Injected", false)
 		end
 	end))
+end
+
+local function CreateSlownessZone(Position: Vector3, Size: Vector3, Duration: number, OwnerCharacter: Model)
+	local zone = Instance.new("Part")
+	zone.Name = "SlownessZone"
+	zone.Anchored = true
+	zone.CanCollide = false
+	zone.CanTouch = true
+	zone.CanQuery = true
+	zone.Material = Enum.Material.Neon
+	zone.Color = Color3.fromRGB(90, 170, 255)
+	zone.Transparency = 0.35
+	zone.Size = Size
+	zone.CFrame = CFrame.new(Position)
+	zone.Parent = workspace
+
+	local touchedConnection = zone.Touched:Connect(function(hit)
+		local hitModel = hit.Parent
+		if not hitModel then return end
+		local Humanoid = hitModel:FindFirstChildOfClass("Humanoid")
+		if not Humanoid then return end
+		if hitModel == OwnerCharacter then return end
+		if hitModel:GetAttribute("Slowed") then return end
+
+		hitModel:SetAttribute("Slowed", true)
+		hitModel:SetAttribute("SlowLevel", FollowUpSlownessHitLevel)
+		task.delay(2, function()
+			if hitModel.Parent then
+				hitModel:SetAttribute("Slowed", false)
+			end
+		end)
+	end)
+
+	task.delay(Duration, function()
+		if touchedConnection then
+			touchedConnection:Disconnect()
+		end
+		if zone.Parent then
+			zone:Destroy()
+		end
+	end)
+
+	return zone
 end
 
 -- ============================================================
@@ -134,8 +174,9 @@ local function ExecuteFollowUp(self: Types.Ability, CharacterModel: Model)
 
 	local HitOccurred = false
 	local OriginalSpeed = Humanoid.WalkSpeed or 16
+	local StartPos = HRP.Position
+	local LookDir = HRP.CFrame.LookVector
 
-	-- Play follow-up animation
 	if FollowUpAnimation and FollowUpAnimation ~= "rbxassetid://0" then
 		local anim = Instance.new("Animation")
 		anim.AnimationId = FollowUpAnimation
@@ -146,7 +187,6 @@ local function ExecuteFollowUp(self: Types.Ability, CharacterModel: Model)
 		end)
 	end
 
-	-- Boost WalkSpeed (player can turn naturally now)
 	Humanoid.WalkSpeed = OriginalSpeed * FollowUpSprintMultiplier
 
 	Hitbox.New(self.Owner, {
@@ -159,13 +199,14 @@ local function ExecuteFollowUp(self: Types.Ability, CharacterModel: Model)
 		OnHit = function(Hit)
 			HitOccurred = true
 			local TargetCharacter = Hit.Parent
-
 			if TargetCharacter and TargetCharacter:FindFirstChild("Humanoid") then
 				ApplyCorruption(TargetCharacter)
 
+				local ZonePos = TargetCharacter:GetPivot().Position + Vector3.new(0, 0.5, 0)
+				CreateSlownessZone(ZonePos, Vector3.new(7, 1, 7), 3.5, CharacterModel)
+
 				TargetCharacter:SetAttribute("Slowed", true)
 				TargetCharacter:SetAttribute("SlowLevel", FollowUpSlownessHitLevel)
-
 				task.delay(FollowUpSlownessHitDuration, function()
 					if TargetCharacter.Parent then
 						TargetCharacter:SetAttribute("Slowed", false)
@@ -187,9 +228,11 @@ local function ExecuteFollowUp(self: Types.Ability, CharacterModel: Model)
 		end
 
 		if not HitOccurred then
+			local EndPos = StartPos + (LookDir * 6)
+			CreateSlownessZone(EndPos + Vector3.new(0, 0.5, 0), Vector3.new(7, 1, 7), 3.5, CharacterModel)
+
 			CharacterModel:SetAttribute("Slowed", true)
 			CharacterModel:SetAttribute("SlowLevel", FollowUpSlownessMissLevel)
-
 			task.delay(FollowUpSlownessMissDuration, function()
 				if CharacterModel.Parent then
 					CharacterModel:SetAttribute("Slowed", false)
@@ -200,7 +243,7 @@ local function ExecuteFollowUp(self: Types.Ability, CharacterModel: Model)
 end
 
 -- ============================================================
--- SLASH
+-- SLASH (M1)
 -- ============================================================
 local function DefaultSlashBehaviour(self: Types.Ability)
 	if RunService:IsServer() then
@@ -213,9 +256,7 @@ local function DefaultSlashBehaviour(self: Types.Ability)
 			CharacterModel:SetAttribute("Injected", false)
 		end
 
-		-- Record the time this M1 was triggered
-		local M1TriggerTime = tick()
-		CharacterModel:SetAttribute("LastM1Time", M1TriggerTime)
+		CharacterModel:SetAttribute("LastM1Time", tick())
 		CharacterModel:SetAttribute("M1FollowUpTriggered", false)
 
 		Sounds.PlaySound(self.UseSound, { Parent = HRP })
@@ -246,19 +287,148 @@ local function DefaultSlashBehaviour(self: Types.Ability)
 				end,
 			})
 		end)
+	end
+end
 
-		-- Keep the window open for follow-up
-		task.delay(FollowUpTimeWindow, function()
-			if CharacterModel.Parent then
-				CharacterModel:SetAttribute("LastM1Time", 0)
+-- ============================================================
+-- SCRIPT WAVE (2nd ability)
+-- ============================================================
+local function ScriptWaveBehaviour(self: Types.Ability)
+	if not RunService:IsServer() then return end
+
+	local CharacterModel = self.OwnerProperties.Character
+	local HRP = self.OwnerProperties.HRP
+	if not CharacterModel or not HRP then return end
+
+	local WavePart = Instance.new("Part")
+	WavePart.Name = "ScriptWave"
+	WavePart.Anchored = true
+	WavePart.CanCollide = false
+	WavePart.CanTouch = true
+	WavePart.Material = Enum.Material.Neon
+	WavePart.Color = Color3.fromRGB(100, 255, 160)
+	WavePart.Transparency = 0.35
+	WavePart.Size = Vector3.new(8, 1, 2)
+	WavePart.CFrame = CFrame.new(HRP.Position + HRP.CFrame.LookVector * 8 + Vector3.new(0, 1, 0), HRP.Position + HRP.CFrame.LookVector * 8 + Vector3.new(0, 1, 0) + HRP.CFrame.LookVector)
+	WavePart.Parent = workspace
+
+	local hitSet = {}
+	local connection = WavePart.Touched:Connect(function(hit)
+		local Model = hit.Parent
+		if not Model then return end
+		local Humanoid = Model:FindFirstChildOfClass("Humanoid")
+		if not Humanoid then return end
+		if Model == CharacterModel then return end
+		if hitSet[Model] then return end
+		hitSet[Model] = true
+
+		Humanoid:TakeDamage(9)
+		ApplyCorruption(Model)
+		Model:SetAttribute("Slowed", true)
+		Model:SetAttribute("SlowLevel", 2)
+		task.delay(2.5, function()
+			if Model.Parent then
+				Model:SetAttribute("Slowed", false)
 			end
 		end)
-	else
-		self.OwnerProperties.TurnToMoveDirection:AddHeadPreventionFactor("Slash")
-		self:AddConnection(task.delay(0.7, function()
-			self.OwnerProperties.TurnToMoveDirection:RemoveHeadPreventionFactor("Slash")
-		end))
-	end
+	end)
+
+	task.delay(0.6, function()
+		if connection then
+			connection:Disconnect()
+		end
+		if WavePart.Parent then
+			WavePart:Destroy()
+		end
+	end)
+end
+
+-- ============================================================
+-- COOLGUI CREATION (1st ability)
+-- ============================================================
+local function CoolGUICreationBehaviour(self: Types.Ability)
+	if not RunService:IsServer() then return end
+
+	local CharacterModel = self.OwnerProperties.Character
+	local HRP = self.OwnerProperties.HRP
+	if not CharacterModel or not HRP then return end
+
+	local pulse = Instance.new("Part")
+	pulse.Name = "CoolGUI_Pulse"
+	pulse.Shape = Enum.PartType.Cylinder
+	pulse.Material = Enum.Material.Neon
+	pulse.Color = Color3.fromRGB(255, 255, 0)
+	pulse.Anchored = true
+	pulse.CanCollide = false
+	pulse.CanTouch = false
+	pulse.Transparency = 0.35
+	pulse.Size = Vector3.new(2, 0.5, 2)
+	pulse.CFrame = HRP.CFrame * CFrame.new(0, 0, 3)
+	pulse.Parent = workspace
+
+	local connection = pulse.Touched:Connect(function(hit)
+		local Model = hit.Parent
+		if not Model then return end
+		local Humanoid = Model:FindFirstChildOfClass("Humanoid")
+		if not Humanoid or Model == CharacterModel then return end
+		Humanoid:TakeDamage(4)
+		ApplyCorruption(Model)
+	end)
+
+	task.delay(0.75, function()
+		if connection then
+			connection:Disconnect()
+		end
+		if pulse.Parent then
+			pulse:Destroy()
+		end
+	end)
+end
+
+-- ============================================================
+-- STACK OVERFLOW (4th ability)
+-- ============================================================
+local function StackOverflowBehaviour(self: Types.Ability)
+	if not RunService:IsServer() then return end
+
+	local CharacterModel = self.OwnerProperties.Character
+	local HRP = self.OwnerProperties.HRP
+	if not CharacterModel or not HRP then return end
+
+	local blast = Instance.new("Part")
+	blast.Name = "StackOverflowBlast"
+	blast.Anchored = true
+	blast.CanCollide = false
+	blast.CanTouch = true
+	blast.Material = Enum.Material.Neon
+	blast.Color = Color3.fromRGB(255, 96, 96)
+	blast.Transparency = 0.25
+	blast.Size = Vector3.new(10, 10, 10)
+	blast.CFrame = HRP.CFrame
+	blast.Parent = workspace
+
+	local hitSet = {}
+	local connection = blast.Touched:Connect(function(hit)
+		local Model = hit.Parent
+		if not Model then return end
+		local Humanoid = Model:FindFirstChildOfClass("Humanoid")
+		if not Humanoid then return end
+		if Model == CharacterModel then return end
+		if hitSet[Model] then return end
+		hitSet[Model] = true
+
+		Humanoid:TakeDamage(18)
+		ApplyCorruption(Model)
+	end)
+
+	task.delay(0.8, function()
+		if connection then
+			connection:Disconnect()
+		end
+		if blast.Parent then
+			blast:Destroy()
+		end
+	end)
 end
 
 -- ============================================================
@@ -289,18 +459,14 @@ local function LaunchInjectionProjectile(self: Types.Ability)
 			Connections = {
 				Hit = function(_Config, Humanoid: Humanoid)
 					if Triggered then return end
-
 					local TargetCharacter = Humanoid.Parent
 					if not TargetCharacter or not TargetCharacter:IsA("Model") then return end
-
 					local Role = TargetCharacter:FindFirstChild("Role")
 					if not Role or not Role:IsA("StringValue") or Role.Value ~= "Survivor" then
 						return
 					end
-
 					Triggered = true
 					self:ApplyInjectedBuff(CharacterModel)
-
 					if ProjectileInstance then
 						ProjectileInstance:Destroy()
 					end
@@ -311,50 +477,36 @@ local function LaunchInjectionProjectile(self: Types.Ability)
 end
 
 -- ============================================================
--- INJECT (projectile)
+-- INJECT (3rd ability)
 -- ============================================================
 local function InjectBehaviour(self: Types.Ability)
 	if not RunService:IsServer() then return end
-
 	local CharacterModel = self.OwnerProperties.Character
 
 	task.delay(InjectWindupDuration, function()
 		if not CharacterModel.Parent or self.OwnerProperties.Humanoid.Health <= 0 then
 			return
 		end
-
 		LaunchInjectionProjectile(self)
 	end)
 end
 
 -- ============================================================
--- ABILITY #3 PLACEHOLDER
+-- ABILITY 1 / 2 / 3 / 4 ORDER
 -- ============================================================
-local function Ability3Behaviour(self: Types.Ability)
-	if RunService:IsServer() then
-		local CharacterModel = self.OwnerProperties.Character
-		
-		-- Check if we're within the follow-up window from the last M1
-		local LastM1Time = CharacterModel:GetAttribute("LastM1Time") or 0
-		local TimeSinceM1 = tick() - LastM1Time
-		
-		if TimeSinceM1 <= FollowUpTimeWindow and not CharacterModel:GetAttribute("M1FollowUpTriggered") then
-			-- This is a follow-up M1!
-			CharacterModel:SetAttribute("M1FollowUpTriggered", true)
-			CharacterModel:SetAttribute("LastM1Time", 0) -- Clear the window
-			ExecuteFollowUp(self, CharacterModel)
-		else
-			-- Regular ability or outside window
-			print("Ability 3 triggered - TODO: implement regular ability")
-		end
-	end
-end
+local function TryFollowUpFromSecondM1(self: Types.Ability)
+	if not RunService:IsServer() then return end
 
--- ============================================================
--- ABILITY #4 PLACEHOLDER
--- ============================================================
-local function Ability4Behaviour(self: Types.Ability)
-	print("Ability 4 triggered - TODO: implement")
+	local CharacterModel = self.OwnerProperties.Character
+	if not CharacterModel then return end
+
+	local LastM1Time = CharacterModel:GetAttribute("LastM1Time") or 0
+	local TimeSinceM1 = tick() - LastM1Time
+	if TimeSinceM1 <= FollowUpTimeWindow and not CharacterModel:GetAttribute("M1FollowUpTriggered") then
+		CharacterModel:SetAttribute("M1FollowUpTriggered", true)
+		CharacterModel:SetAttribute("LastM1Time", 0)
+		ExecuteFollowUp(self, CharacterModel)
+	end
 end
 
 -- ============================================================
@@ -377,9 +529,59 @@ local C00lKidd: Types.Killer = Character.CreateKiller({
 			RunAnimation = "rbxassetid://102981744469535",
 		},
 	},
-
 	GameplayConfig = {
 		Abilities = {
+			CoolGUICreation = Ability.New({
+				Name = "CoolGUI Creation",
+				InputName = "FirstAbility",
+				Cooldown = 8,
+				Duration = 0.8,
+				UseSound = "rbxassetid://0",
+				UseAnimation = "rbxassetid://0",
+				RenderImage = "rbxassetid://0",
+				Behaviour = CoolGUICreationBehaviour,
+			}),
+
+			ScriptWave = Ability.New({
+				Name = "ScriptWave",
+				InputName = "SecondAbility",
+				Cooldown = 8,
+				Duration = 1,
+				UseSound = "rbxassetid://0",
+				UseAnimation = "rbxassetid://0",
+				RenderImage = "rbxassetid://0",
+				Behaviour = ScriptWaveBehaviour,
+			}),
+
+			Inject = Ability.New({
+				Name = "Inject",
+				InputName = "ThirdAbility",
+				Cooldown = 2,
+				Duration = 2,
+				UseSound = "rbxassetid://0",
+				UseAnimation = "rbxassetid://110200320368434",
+				ProjectileModel = CreateInjectionProjectileTemplate(),
+				ProjectileSpeed = ProjectileSpeed,
+				ProjectileLifetime = ProjectileLifetime,
+				ProjectileSize = ProjectileHitboxSize,
+				ProjectileOffset = ProjectileOffset,
+				ProjectileDamage = ProjectileDamage,
+				BuffDuration = InjectedBuffDuration,
+				ApplyInjectedBuff = ApplyInjectedBuff,
+				Behaviour = InjectBehaviour,
+			}),
+
+			StackOverflow = Ability.New({
+				Name = "Stack Overflow",
+				InputName = "FourthAbility",
+				Cooldown = 12,
+				Duration = 1.5,
+				UseSound = "rbxassetid://0",
+				UseAnimation = "rbxassetid://0",
+				RenderImage = "rbxassetid://0",
+				Behaviour = StackOverflowBehaviour,
+			}),
+
 			Slash = Ability.New({
 				Name = "Slash",
 				InputName = "Slash",
@@ -396,53 +598,12 @@ local C00lKidd: Types.Killer = Character.CreateKiller({
 				InjectedDamageBonus = InjectedDamageBonus,
 				Behaviour = DefaultSlashBehaviour,
 			}),
-
-			Inject = Ability.New({
-				Name = "Inject",
-				InputName = "FourthAbility",
-				Cooldown = 2,
-				Duration = 2,
-				UseSound = "rbxassetid://0",
-				UseAnimation = "rbxassetid://110200320368434",
-				ProjectileModel = CreateInjectionProjectileTemplate(),
-				ProjectileSpeed = ProjectileSpeed,
-				ProjectileLifetime = ProjectileLifetime,
-				ProjectileSize = ProjectileHitboxSize,
-				ProjectileOffset = ProjectileOffset,
-				ProjectileDamage = ProjectileDamage,
-				BuffDuration = InjectedBuffDuration,
-				ApplyInjectedBuff = ApplyInjectedBuff,
-				Behaviour = InjectBehaviour,
-			}),
-
-			Ability3 = Ability.New({
-				Name = "Ability 3",
-				InputName = "SecondAbility",
-				Cooldown = 0.5,
-				Duration = 1,
-				UseSound = "rbxassetid://0",
-				UseAnimation = "rbxassetid://0",
-				RenderImage = "rbxassetid://0",
-				Behaviour = Ability3Behaviour,
-			}),
-
-			Ability4 = Ability.New({
-				Name = "Ability 4",
-				InputName = "ThirdAbility",
-				Cooldown = 10,
-				Duration = 1.5,
-				UseSound = "rbxassetid://0",
-				UseAnimation = "rbxassetid://0",
-				RenderImage = "rbxassetid://0",
-				Behaviour = Ability4Behaviour,
-			}),
 		},
 	},
 })
 
 -- Description
 local NameLabel = '<font color="rgb(0, 255, 0)">' .. C00lKidd.Config.Name .. "</font>"
-
 C00lKidd.Config.Description = {
 	{ Type = "Separator", Text = "GENERAL INFO" },
 	{ Type = "Header", Text = C00lKidd.Config.Name:upper() },
@@ -450,44 +611,21 @@ C00lKidd.Config.Description = {
 	{ Type = "Text", Text = "TODO: write C00lKidd's lore paragraph here." },
 
 	{ Type = "Separator", Text = "ABILITIES" },
-
+	{ Type = "Header", Text = "1ST ABILITY - COOLGUI CREATION" },
+	{ Type = "Text", Text = "A short pulse that damages enemies in front of C00lKidd and applies corruption." },
+	{ Type = "Header", Text = "2ND ABILITY - SCRIPTWAVE" },
+	{ Type = "Text", Text = "Launches a fast wave without locking C00lKidd in place while it resolves." },
+	{ Type = "Header", Text = "3RD ABILITY - INJECT" },
+	{ Type = "Text", Text = "Throws a projectile that buffs slashes for " .. tostring(InjectedBuffDuration) .. " seconds when it hits a survivor." },
+	{ Type = "Header", Text = "4TH ABILITY - STACK OVERFLOW" },
+	{ Type = "Text", Text = "Creates a burst explosion that deals large damage and applies corruption." },
 	{ Type = "Header", Text = "SLASH" },
-	{
-		Type = "Text",
-		Text = NameLabel .. " performs a slash with a windup. Injected targets make his M1 attacks deal " .. tostring(InjectedDamageBonus) .. " additional damage.",
-	},
-
-	{ Type = "Header", Text = "INJECT" },
-	{
-		Type = "Text",
-		Text = NameLabel .. " throws a projectile with a " .. tostring(InjectWindupDuration) .. "s windup. Hitting with projectile buffs his slashes for " .. tostring(InjectedBuffDuration) .. " seconds.",
-	},
-
-	{ Type = "Header", Text = "ABILITY 3" },
-	{
-		Type = "Text",
-		Text = "Click within " .. tostring(FollowUpTimeWindow) .. "s of your last M1 to trigger a follow-up lunge.",
-	},
-
-	{ Type = "Header", Text = "ABILITY 4" },
-	{
-		Type = "Text",
-		Text = "TODO: Add Ability 4 description.",
-	},
-
-	{ Type = "Separator", Text = "PASSIVES" },
-
-	{ Type = "Header", Text = "SCRIPT INJECTION" },
-	{
-		Type = "Text",
-		Text = "Victims hit by " .. NameLabel .. "'s slashes gain corruption stacks (max " .. tostring(CorruptionMaxStacks) .. "). Each stack grants " .. tostring(math.floor(CorruptionWeaknessBase * 100)) .. "% weakness, scaling up to " .. tostring(math.floor(CorruptionWeaknessBase * 100 * CorruptionMaxStacks)) .. "%. The M1 buff is removed after a single M1 but corruption persists.",
-	},
-
+	{ Type = "Text", Text = NameLabel .. " performs a slash with a windup. Injected targets make his M1 attacks deal " .. tostring(InjectedDamageBonus) .. " additional damage." },
 	{ Type = "Header", Text = "SWORD FOLLOW-UP" },
-	{
-		Type = "Text",
-		Text = "After slashing, click Ability 3 within " .. tostring(FollowUpTimeWindow) .. "s to trigger a follow-up lunge with " .. tostring(FollowUpDamage) .. " damage + " .. tostring(FollowUpBurningDamage) .. " burning damage. On hit: Slowness " .. tostring(FollowUpSlownessHitLevel) .. " for " .. tostring(FollowUpSlownessHitDuration) .. "s. On miss: Slowness " .. tostring(FollowUpSlownessMissLevel) .. " for " .. tostring(FollowUpSlownessMissDuration) .. "s.",
-	},
+	{ Type = "Text", Text = "Click the second M1 within " .. tostring(FollowUpTimeWindow) .. "s of the first to trigger a follow-up lunge. The lunge creates a slowness zone at the hit location or end position." },
+	{ Type = "Separator", Text = "PASSIVES" },
+	{ Type = "Header", Text = "SCRIPT INJECTION" },
+	{ Type = "Text", Text = "Victims hit by " .. NameLabel .. "'s slashes gain corruption stacks (max " .. tostring(CorruptionMaxStacks) .. "). Each stack grants " .. tostring(math.floor(CorruptionWeaknessBase * 100)) .. "% weakness, scaling up to " .. tostring(math.floor(CorruptionWeaknessBase * 100 * CorruptionMaxStacks)) .. "%." },
 }
 
 return C00lKidd
