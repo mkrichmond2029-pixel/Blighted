@@ -17,6 +17,13 @@ local ProjectileDamage = 5
 local ProjectileOffset = CFrame.new(0, 1, -2)
 local ProjectileHitboxSize = Vector3.new(2.5, 2.5, 5)
 
+-- Slash windup config
+local SlashWindupDuration = 0.4
+local SlashEndlagDuration = 0.5
+
+-- Inject config
+local InjectWindupDuration = 0.5
+
 local InjectionProjectileTemplate = Instance.new("Part")
 InjectionProjectileTemplate.Name = "ScriptInjection"
 InjectionProjectileTemplate.Shape = Enum.PartType.Ball
@@ -59,9 +66,13 @@ local function DefaultSlashBehaviour(self: Types.Ability)
 
         if CharacterModel:GetAttribute("Injected") then
             Damage += self.InjectedDamageBonus
+            CharacterModel:SetAttribute("Injected", false)
         end
 
         Sounds.PlaySound(self.UseSound, { Parent = self.OwnerProperties.HRP })
+
+        -- the attack now controls its own animation stop
+        self:PlayUseAnimation()
 
         task.delay(self.Delay, function()
             if not CharacterModel.Parent or self.OwnerProperties.Humanoid.Health <= 0 then
@@ -76,6 +87,12 @@ local function DefaultSlashBehaviour(self: Types.Ability)
                 Reason = "Slash Attack",
                 ExecuteOnKill = true,
             })
+        end)
+
+        task.delay((self.Delay or 0.1) + (self.Duration or 0.4) + SlashEndlagDuration, function()
+            if self.UseAnimationTrack and self.UseAnimationTrack.IsPlaying then
+                self:StopUseAnimation()
+            end
         end)
     else
         self.OwnerProperties.TurnToMoveDirection:AddHeadPreventionFactor("Slash")
@@ -139,7 +156,19 @@ end
 
 local function InjectBehaviour(self: Types.Ability)
     if RunService:IsServer() then
-        LaunchInjectionProjectile(self)
+        self:PlayUseAnimation()
+        task.delay(InjectWindupDuration, function()
+            if self.OwnerProperties.Humanoid.Health <= 0 then
+                return
+            end
+            LaunchInjectionProjectile(self)
+        end)
+
+        task.delay(InjectWindupDuration + 0.6, function()
+            if self.UseAnimationTrack and self.UseAnimationTrack.IsPlaying then
+                self:StopUseAnimation()
+            end
+        end)
     end
 end
 
