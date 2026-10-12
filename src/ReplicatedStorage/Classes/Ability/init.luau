@@ -35,7 +35,7 @@ function AbilityType.GetDefaultSettings(): Types.Ability
         CooldownTimer = 0,
         OnCooldown = false,
         AutomaticCooldown = true,
-        
+
         Duration = 0.4,
 
         DisableOtherAbilitiesOnPerform = true,
@@ -56,15 +56,7 @@ function AbilityType.GetDefaultSettings(): Types.Ability
     }, AbilityType)
 end
 
---- ## DEPRECATED: Use `Ability.GetDefaultSettings()` instead.
---- Ability preset for customization.
-@deprecated
-function AbilityType.GetDefaultAbilitySettings(): Types.Ability
-    return AbilityType.GetDefaultSettings()
-end
-
---- ## DEPRECATED: Use `Ability.GetDefaultPassiveSettings()` instead.
-function AbilityType.GetDefaultPassiveSettings(): Types.Ability
+function AbilityType.GetDefaultPassiveSettings()
     return setmetatable(Utils.Type.DeepTableOverwrite({
         Passive = true,
 
@@ -76,7 +68,6 @@ function AbilityType.GetDefaultPassiveSettings(): Types.Ability
             self.Janitor = Janitor.new()
             self.Janitor:LinkToInstance(self.Owner.Character)
 
-            --clearing ability stuff to dispose of this code when the player gets readded
             self.Janitor:Add(function()
                 self:Destroy()
             end, true)
@@ -84,17 +75,12 @@ function AbilityType.GetDefaultPassiveSettings(): Types.Ability
             if RunService:IsServer() then
                 Utils.Misc.Print("Initting "..self.Name.." ability for "..plr.Name)
 
-                --is this exploitable? yes.
-                --do i give a fuck? no.
-                --thanks byfron.
-
                 self.OwnerProperties = {
                     Character = self.Owner.Character,
                     Humanoid = self.Owner.Character:FindFirstChildWhichIsA("Humanoid"),
                     HRP = Utils.Character.GetRootPart(self.Owner),
                 }
 
-                --executes any extra initialization code that the ability might need
                 if self.ExtraInit then
                     self:ExtraInit()
                 end
@@ -113,26 +99,32 @@ function AbilityType.GetDefaultPassiveSettings(): Types.Ability
                 TurnToMoveDirection = require(self.Owner.PlayerScripts.Miscellaneous.TurnToMoveDirection),
             }
 
-            --executes any extra initialization code that the ability might need
             if self.ExtraInit then
                 self:ExtraInit()
             end
         end,
+
         ReloadAnimation = function(self: Types.Ability, id: string)
             warn("Ability \""..self.Name.."\" is a Passive, so no use animation can be assigned to it!")
         end,
+
         PlayUseAnimation = function(self: Types.Ability)
             warn("Ability \""..self.Name.."\" is a Passive, so no use animation is available!")
         end,
+
+        StopUseAnimation = function(self: Types.Ability)
+            warn("Ability \""..self.Name.."\" is a Passive, so no use animation is available!")
+        end,
+
         AttemptUse = function(self: Types.Ability)
             warn("Ability \""..self.Name.."\" is a Passive, so it can't be used through input!")
         end,
+
         ChangeAbilityCharges = function(self: Types.Ability, _Type: "Add" | "Set" | "Take", _amount: number)
             warn("Ability \""..self.Name.."\" is a Passive, so charges aren't applied!")
         end,
 
         PlayUseAnimationOnUse = false,
-
         Cooldown = 0,
 
         CanUse = function(_self: Types.Ability): boolean
@@ -143,22 +135,12 @@ function AbilityType.GetDefaultPassiveSettings(): Types.Ability
         end,
 
         Duration = 0,
-
         DisableOtherAbilitiesOnPerform = false,
         DisableSlashOnPerform = false,
-
         Signals = {},
     }, AbilityType.GetDefaultSettings()), AbilityType)
 end
 
---- ## DEPRECATED: use `Ability.GetDefaultPassiveSettings()` instead.
-@deprecated
-function AbilityType.GetDefaultPassiveAbilitySettings(): Types.Ability
-    return AbilityType.GetDefaultPassiveSettings()
-end
-
---- Creates an ability with the settings specified in `Props`.
---- Every property that has to be there has a fallback, so not all properties have to be written there if the default values are fine.
 function AbilityType.New(Props: Types.Ability): Types.Ability
     Props = Props or {}
 
@@ -171,14 +153,6 @@ function AbilityType.New(Props: Types.Ability): Types.Ability
     )
 end
 
---- ## DEPRECATED: use `Ability.New()` instead.
---- Creates an ability with the settings specified in `Props`.
---- Every property that has to be there has a fallback, so not all properties have to be written there if the default values are fine.
-@deprecated
-function AbilityType.CreateAbility(Props: Types.Ability): Types.Ability
-    return AbilityType.New(Props)
-end
-
 function AbilityType:Init(charModule: Types.Killer | Types.Survivor, plr: Player)
     self.Owner = plr
     self.CharModule = charModule
@@ -187,7 +161,6 @@ function AbilityType:Init(charModule: Types.Killer | Types.Survivor, plr: Player
     self.Janitor = Janitor.new()
     self.Janitor:LinkToInstance(self.Owner.Character)
 
-    --clearing ability stuff to dispose of this code when the player gets readded
     self.Janitor:Add(function()
         self:Destroy()
     end, true)
@@ -199,7 +172,7 @@ function AbilityType:Init(charModule: Types.Killer | Types.Survivor, plr: Player
                 if newChild.Name ~= "Stunned" then
                     return
                 end
-                
+
                 for _, Connection in self.StunnableConnections do
                     if typeof(Connection) == "thread" then
                         if coroutine.running() ~= Connection then
@@ -216,10 +189,6 @@ function AbilityType:Init(charModule: Types.Killer | Types.Survivor, plr: Player
     if RunService:IsServer() then
         Utils.Misc.Print("Initting "..self.Name.." ability for "..self.Owner.Name)
 
-        --is this exploitable? yes.
-        --do i give a fuck? no.
-        --thanks byfron.
-
         self.OwnerProperties = {
             Character = self.Owner.Character,
             Humanoid = self.Owner.Character:FindFirstChildWhichIsA("Humanoid"),
@@ -234,12 +203,10 @@ function AbilityType:Init(charModule: Types.Killer | Types.Survivor, plr: Player
                     end
                 end)
 
-                --cooldown stuffs
                 if self.AutomaticCooldown then
                     self:SetOnCooldown()
                 end
 
-                --decreasing uses left if it's supposed to be limited
                 if self.UseSettings.Limited then
                     task.spawn(function()
                         self:ChangeAbilityCharges("Set", self.UsesLeft - 1)
@@ -259,7 +226,6 @@ function AbilityType:Init(charModule: Types.Killer | Types.Survivor, plr: Player
             end
         end))
 
-        --executes any extra initialization code that the ability might need
         if self.ExtraInit then
             self:ExtraInit()
         end
@@ -280,11 +246,16 @@ function AbilityType:Init(charModule: Types.Killer | Types.Survivor, plr: Player
     }
 
     if #self.UseAnimation > 0 then
-        --nesting in pcall so that if there's nothing it doesn't matter
         pcall(function()
             local AnimName = self.Name:gsub(" ", "").."UseAnim"
             charModule.GameplayConfig.Cache.Animations[AnimName] = Utils.Character.LoadAnimationFromID(self.Owner.Character, self.UseAnimation)
             self.UseAnimationTrack = charModule.GameplayConfig.Cache.Animations[AnimName]
+
+            if self.UseAnimationTrack then
+                self.UseAnimationTrack.Priority = Enum.AnimationPriority.Action
+                self.UseAnimationTrack.TimePosition = 0
+                self.UseAnimationTrack.Looped = false
+            end
         end)
     end
 
@@ -299,25 +270,24 @@ function AbilityType:Init(charModule: Types.Killer | Types.Survivor, plr: Player
 
     self:AddConnection(Network:SetConnection("UsePlayerAbility", "REMOTE_EVENT", function(abilityName: string)
         if abilityName == self.Name then
-            --disables ability keys for preventing the usage of a different ability while using it
             if self.DisableOtherAbilitiesOnPerform then
                 self:DisableAllAbilities()
             end
 
-            --cooldown stuffs
             if self.AutomaticCooldown then
                 self:SetOnCooldown()
             end
-            --plays any existant use animation
+
             task.defer(function()
                 if self.PlayUseAnimationOnUse then
                     self:PlayUseAnimation()
                 end
             end)
+
             task.spawn(function()
                 self.Signals.Used:Fire()
             end)
-            --ability stuffs
+
             if self.Behaviour then
                 self:Behaviour()
             end
@@ -330,27 +300,49 @@ function AbilityType:Init(charModule: Types.Killer | Types.Survivor, plr: Player
         end
     end))
 
-    --executes any extra initialization code that the ability might need
     if self.ExtraInit then
         self:ExtraInit()
     end
 end
 
 function AbilityType:ReloadAnimation(id: string)
-    self.UseAnimationTrack = Utils.Character.LoadAnimationFromID(self.Owner.Character, id)
+    local track = Utils.Character.LoadAnimationFromID(self.Owner.Character, id)
     local AnimName = self.Name:gsub(" ", "").."UseAnim"
-    self.CharModule.GameplayConfig.Cache.Animations[AnimName] = Utils.Character.LoadAnimationFromID(self.Owner.Character, id)
-    self.UseAnimationTrack = self.CharModule.GameplayConfig.Cache.Animations[AnimName]
+    self.CharModule.GameplayConfig.Cache.Animations[AnimName] = track
+    self.UseAnimationTrack = track
+
+    if self.UseAnimationTrack then
+        self.UseAnimationTrack.Priority = Enum.AnimationPriority.Action
+        self.UseAnimationTrack.TimePosition = 0
+        self.UseAnimationTrack.Looped = false
+    end
 end
 
 function AbilityType:PlayUseAnimation()
-    if self.UseAnimationTrack then
-        self.UseAnimationTrack:Play(self.UseAnimationTransitionTime)
-        self.OwnerProperties.TurnToMoveDirection:AddHeadPreventionFactor(self.Name)
-        self:AddConnection(task.delay(self.UseAnimationTrack.Length - (1/20 * 2), function()
-            self.UseAnimationTrack:Stop(self.UseAnimationTransitionTime)
-            self.OwnerProperties.TurnToMoveDirection:RemoveHeadPreventionFactor(self.Name)
-        end))
+    if not self.UseAnimationTrack then
+        return
+    end
+
+    self.UseAnimationTrack.Priority = Enum.AnimationPriority.Action
+    self.UseAnimationTrack.TimePosition = 0
+    self.UseAnimationTrack.Looped = false
+    self.UseAnimationTrack:Play(self.UseAnimationTransitionTime)
+
+    self.OwnerProperties.TurnToMoveDirection:AddHeadPreventionFactor(self.Name)
+end
+
+function AbilityType:StopUseAnimation(transitionTime: number?)
+    transitionTime = transitionTime or self.UseAnimationTransitionTime
+    if not self.UseAnimationTrack then
+        return
+    end
+
+    if self.UseAnimationTrack.IsPlaying then
+        self.UseAnimationTrack:Stop(transitionTime)
+    end
+
+    if self.OwnerProperties and self.OwnerProperties.TurnToMoveDirection then
+        self.OwnerProperties.TurnToMoveDirection:RemoveHeadPreventionFactor(self.Name)
     end
 end
 
@@ -372,9 +364,8 @@ function AbilityType:AttemptUse()
         return
     end
 
-    --NOTE: this is handled this way (by making separate cooldowns in both server and client) so that it's possible to prevent network calls if it's impossible to use the ability in client
     if self:CanUse() then
-        Network:FireServerConnection("UsePlayerAbility", "REMOTE_EVENT", self.Name) --i know this is insecure but sue me lol
+        Network:FireServerConnection("UsePlayerAbility", "REMOTE_EVENT", self.Name)
     end
 end
 
@@ -392,12 +383,12 @@ function AbilityType:ChangeAbilityCharges(Type: "Add" | "Set" | "Take", amount: 
         Network:FireClientConnection(self.Owner, "ChangeAbilityCharges", "REMOTE_EVENT", self.Name, Type, amount)
     end
 end
-        
+
 function AbilityType:DisableAllAbilities(Duration: number?, DisableSlash: boolean?)
     if RunService:IsServer() then
         return
     end
-    
+
     Duration = Duration or self.Duration
     if DisableSlash == nil then
         DisableSlash = self.DisableSlashOnPerform
@@ -438,34 +429,15 @@ function AbilityType:SetOnCooldown(duration: number?)
     self.CooldownTimer = duration
 
     if RunService:IsServer() then
-        -- task.spawn(function()
-        --     --NOTE: this is still network stability dependant in the way that you may have to wait 0.1s more for the ability to not be on cooldown because e.g. if it waits 0.19s because of framerate or anything it will reduce 0.1s and wait another 0.1s but the change is so little i can't care enough to change it back
-        --     while self.CooldownTimer > 0 do
-        --         -- gets the amount the server waits
-        --         local WaitAmount = task.wait(0.1)
-        --         -- floors that onto how much it's been waiting to e.g. drain 0.1s if it waits 0.12s and 0.2s if it waits more than 0.21s
-        --         WaitAmount = math.floor(WaitAmount * 10) / 10
-        --         -- reduces cooldown timer
-        --         self.CooldownTimer -= WaitAmount
-        --     end
-        --     self.CooldownTimer = 0
-        --     self.OnCooldown = false
-        -- end)
-
-        --so this is obv more optimized but that removes the ability to read cooldown amounts on server, might work on it later
         self:AddConnection(task.delay(duration, function()
             self.CooldownTimer = 0
             self.OnCooldown = false
         end))
     else
         task.spawn(function()
-            --NOTE: this is still network stability dependant in the way that you may have to wait 0.1s more for the ability to not be on cooldown because e.g. if it waits 0.19s because of framerate or anything it will reduce 0.1s and wait another 0.1s but the change is so little i can't care enough to change it back
             while self.CooldownTimer > 0 do
-                -- gets the amount the client waits
                 local WaitAmount = task.wait(0.1)
-                -- floors that onto how much it's been waiting to e.g. drain 0.1s if it waits 0.12s and 0.2s if it waits more than 0.21s
                 WaitAmount = math.floor(WaitAmount * 10) / 10
-                -- reduces cooldown timer
                 self.CooldownTimer -= WaitAmount
             end
             self.CooldownTimer = 0
@@ -495,19 +467,16 @@ function AbilityType:AddStunnableConnection<T>(Connection: T & (RBXScriptConnect
 end
 
 function AbilityType:CanUse(): boolean
-    --if it's limited then it should have to have enough uses left
     local EnoughUses = true
     if workspace:GetAttribute("ChargesEnabled") and self.UseSettings.Limited then
         EnoughUses = self.UsesLeft > 0
     end
 
-    --if the ability is on cooldown or not
     local OnCooldown = false
     if workspace:GetAttribute("CooldownsEnabled") and self.OnCooldown then
         OnCooldown = true
     end
 
-    --if the player isn't stunned, thus can be conscious OR has hope (UNDERTALE REFERENCE????)
     local EffectPrevention = false
     if RunService:IsServer() then
         if self.Owner.Character.Effects:FindFirstChild("Stunned") or self.Owner.Character.Effects:FindFirstChild("Helpless") then
@@ -519,7 +488,6 @@ function AbilityType:CanUse(): boolean
         end
     end
 
-    --if the player isn't emoting
     local Emoting
     if RunService:IsServer() then
         Emoting = self.OwnerProperties.Character:GetAttribute("Emoting") == true
@@ -528,13 +496,13 @@ function AbilityType:CanUse(): boolean
     end
 
     return EnoughUses
-    and self.OwnerProperties.Humanoid.Health > 0 --if the player's alive
-    and not self.OwnerProperties.HRP.Anchored --if the player isn't restrained by initial round setup
+    and self.OwnerProperties.Humanoid.Health > 0
+    and not self.OwnerProperties.HRP.Anchored
     and not self.Owner.Character:GetAttribute("Executing")
     and not Emoting
     and not EffectPrevention
     and not OnCooldown
-    and self:UseConditions() --any extra conditions added by the ability's definition in `Ability:UseConditions()`
+    and self:UseConditions()
 end
 
 function AbilityType:UseConditions(): boolean
