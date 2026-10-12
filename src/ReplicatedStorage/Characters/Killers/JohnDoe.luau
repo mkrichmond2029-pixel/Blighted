@@ -63,7 +63,7 @@ local JOHN_DOE_CONFIG = {
 	-- Speed gained by John Doe when landing an M1 hit
 	SpeedOnHit = {
 		Level = 1, -- corresponds to ReplicatedStorage/Effects/Speed level
-		Duration = 2,
+		Duration = 0.1,
 	},
 }
 
