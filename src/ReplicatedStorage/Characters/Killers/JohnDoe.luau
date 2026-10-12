@@ -60,9 +60,8 @@ local JOHN_DOE_CONFIG = {
 		GlideSpeed = 50,
 		BurstDamage = 10,
 	},
-	-- Speed gained by John Doe when landing an M1 hit
 	SpeedOnHit = {
-		Level = 1, -- corresponds to ReplicatedStorage/Effects/Speed level
+		Level = 1,
 		Duration = 0.1,
 	},
 }
@@ -71,12 +70,16 @@ local JOHN_DOE_CONFIG = {
 -- Helpers
 --============================================================
 local function getHumanoid(model: Model?): Humanoid?
-	if not model then return nil end
+	if not model then
+		return nil
+	end
 	return model:FindFirstChildOfClass("Humanoid")
 end
 
 local function getRoot(model: Model?): BasePart?
-	if not model then return nil end
+	if not model then
+		return nil
+	end
 	return model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
 end
 
@@ -155,17 +158,6 @@ function PartPool:Destroy()
 	table.clear(self._available)
 end
 
-function PartPool:Return(part: BasePart)
-	if not part then return end
-	part.Parent = nil
-	part.Size = Vector3.new(1, 1, 1)
-	part.CFrame = CFrame.new()
-	part.Transparency = 1
-	table.insert(self._available, part)
-end
-
--- (rest of the file unchanged)
-
 --============================================================
 -- Trail Segment
 --============================================================
@@ -180,9 +172,11 @@ function TrailSegment.new(startPos: Vector3, endPos: Vector3, ownerCharacter: Mo
 		workspace:FindFirstChild("Debris"),
 		workspace:FindFirstChild("Effects"),
 	}
+
 	if ownerCharacter then
 		table.insert(filterList, ownerCharacter)
 	end
+
 	if existingSegments then
 		for _, seg in ipairs(existingSegments) do
 			if seg._part then
@@ -190,12 +184,15 @@ function TrailSegment.new(startPos: Vector3, endPos: Vector3, ownerCharacter: Mo
 			end
 		end
 	end
+
 	raycastParams.FilterDescendantsInstances = filterList
 
 	local startRay = workspace:Raycast(startPos + Vector3.new(0, 5, 0), Vector3.new(0, -80, 0), raycastParams)
 	local endRay = workspace:Raycast(endPos + Vector3.new(0, 5, 0), Vector3.new(0, -80, 0), raycastParams)
 
-	if not startRay or not endRay then return nil end
+	if not startRay or not endRay then
+		return nil
+	end
 
 	local floorStart = startRay.Position
 	local floorEnd = endRay.Position
@@ -203,10 +200,14 @@ function TrailSegment.new(startPos: Vector3, endPos: Vector3, ownerCharacter: Mo
 	local dir = floorEnd - floorStart
 	local length = dir.Magnitude
 
-	if length < 0.25 then return nil end
+	if length < 0.25 then
+		return nil
+	end
 
 	local part = pool:Get()
-	if not part then return nil end
+	if not part then
+		return nil
+	end
 
 	local self = setmetatable({
 		_part = part,
@@ -285,6 +286,7 @@ function CorruptTrail.new(ability: Types.Ability): CorruptTrail
 	if RunService:IsServer() then
 		self:_startTrailLoop()
 	end
+
 	return self
 end
 
@@ -295,6 +297,7 @@ function CorruptTrail:_startTrailLoop()
 
 	table.insert(self._connections, RunService.Heartbeat:Connect(function()
 		if not hrp or not hrp.Parent then return end
+
 		local now = os.clock()
 		local currentPos = hrp.Position
 
@@ -363,10 +366,10 @@ function CorruptTrail:_checkSurvivorInSegment(survivorCharacter: Model, segment:
 	local checkRadius = (part.Size.X + part.Size.Z) / 2 + 1.8
 
 	if distance <= checkRadius and not survivorCharacter:GetAttribute("JohnDoeTrailHighlighted") then
-		survivborCharacter:SetAttribute("JohnDoeTrailHighlighted", true)
+		survivorCharacter:SetAttribute("JohnDoeTrailHighlighted", true)
 		task.delay(JOHN_DOE_CONFIG.Trail.Lifetime, function()
 			if survivorCharacter and survivorCharacter.Parent then
-				survivborCharacter:SetAttribute("JohnDoeTrailHighlighted", false)
+				survivorCharacter:SetAttribute("JohnDoeTrailHighlighted", false)
 			end
 		end)
 	end
@@ -479,7 +482,7 @@ function CounterAbility:_executeFling(johnDoe: Model, hrp: BasePart, survivorCha
 	end
 
 	local direction = (survivorHrp.Position - hrp.Position).Unit
-	surviviorHrp.AssemblyLinearVelocity = direction * JOHN_DOE_CONFIG.Counter.FlingForce + Vector3.new(0, 50, 0)
+	survivorHrp.AssemblyLinearVelocity = direction * JOHN_DOE_CONFIG.Counter.FlingForce + Vector3.new(0, 50, 0)
 end
 
 function CounterAbility:destroy()
@@ -504,6 +507,7 @@ function SpeedBoostManager.new(ability: Types.Ability): SpeedBoostManager
 	if RunService:IsServer() then
 		self:_startBoostLoop()
 	end
+
 	return self
 end
 
@@ -524,7 +528,7 @@ function SpeedBoostManager:_startBoostLoop()
 		else
 			humanoid.WalkSpeed = self._baseSpeed
 		end
-		end)
+	end)
 end
 
 function SpeedBoostManager:_shouldApplyBoost(): boolean
@@ -537,6 +541,7 @@ function SpeedBoostManager:_shouldApplyBoost(): boolean
 			return true
 		end
 	end
+
 	return false
 end
 
@@ -602,12 +607,12 @@ function DigitalFootprintManager:place(position: Vector3, character: Model)
 		if survivor:GetAttribute("JohnDoeFootprintSlowed") then return end
 
 		local originalSpeed = humanoid.WalkSpeed
-		survivitor:SetAttribute("JohnDoeFootprintSlowed", true)
+		survivor:SetAttribute("JohnDoeFootprintSlowed", true)
 		humanoid.WalkSpeed = math.max(originalSpeed - JOHN_DOE_CONFIG.DigitalFootprint.SlowAmount, 0)
 
 		task.delay(JOHN_DOE_CONFIG.DigitalFootprint.SlownessDuration, function()
 			if survivor and survivor.Parent then
-				survivitor:SetAttribute("JohnDoeFootprintSlowed", false)
+				survivor:SetAttribute("JohnDoeFootprintSlowed", false)
 				if humanoid and humanoid.Parent then
 					humanoid.WalkSpeed = originalSpeed
 				end
@@ -685,10 +690,10 @@ function Error404Ability:_highlightSurvivors()
 		if survivorCharacter and survivorCharacter.PrimaryPart then
 			local distance = (survivorCharacter.PrimaryPart.Position - hrp.Position).Magnitude
 			if distance <= JOHN_DOE_CONFIG.Error404.HighlightRange then
-				surviviorCharacter:SetAttribute("JohnDoeError404Highlighted", true)
+				survivorCharacter:SetAttribute("JohnDoeError404Highlighted", true)
 				task.delay(3, function()
 					if survivorCharacter and survivorCharacter.Parent then
-						surviviorCharacter:SetAttribute("JohnDoeError404Highlighted", false)
+						survivorCharacter:SetAttribute("JohnDoeError404Highlighted", false)
 					end
 				end)
 			end
@@ -778,7 +783,6 @@ function HulkingForceAbility:execute()
 	local dir = (character.PrimaryPart and character.PrimaryPart.CFrame.LookVector or hrp.CFrame.LookVector).Unit
 	Sounds.PlaySound(ability.UseSound, { Parent = hrp })
 
-	-- Initial dash startup
 	hrp.AssemblyLinearVelocity = dir * JOHN_DOE_CONFIG.HulkingForce.DashForce + Vector3.new(0, 10, 0)
 
 	task.delay(JOHN_DOE_CONFIG.HulkingForce.Delay, function()
@@ -809,11 +813,20 @@ end
 function M1Attack:execute()
 	local ability = self._ability
 	local hrp = ability.OwnerProperties.HRP
+
+	if ability.UseAnimationTrack then
+		ability:PlayUseAnimation()
+	end
+
 	if hrp then
 		Sounds.PlaySound(ability.UseSound, { Parent = hrp })
 	end
 
 	task.delay(JOHN_DOE_CONFIG.M1.Delay, function()
+		if not ability.OwnerProperties.Character or not ability.OwnerProperties.Character.Parent then
+			return
+		end
+
 		Hitbox.New(ability.Owner, {
 			CFrameOffset = ability.HitboxOffset,
 			Size = ability.HitboxSize or JOHN_DOE_CONFIG.M1.HitboxSize,
@@ -823,7 +836,6 @@ function M1Attack:execute()
 			ExecuteOnKill = true,
 			Connections = {
 				PostHit = function(Config: Types.HitboxSettings, Hum: Humanoid)
-					-- Give John Doe a brief Speed effect on landing a successful M1
 					if not RunService:IsServer() then return end
 					if CommonFunctions then
 						CommonFunctions.ApplyEffect({
@@ -839,6 +851,12 @@ function M1Attack:execute()
 				end,
 			},
 		})
+	end)
+
+	task.delay((ability.Duration or JOHN_DOE_CONFIG.M1.Duration) + JOHN_DOE_CONFIG.M1.Delay + 0.3, function()
+		if ability.UseAnimationTrack and ability.UseAnimationTrack.IsPlaying then
+			ability:StopUseAnimation()
+		end
 	end)
 end
 
@@ -998,38 +1016,44 @@ local JohnDoe: Types.Killer = Character.CreateKiller({
 local NameLabel = '<font color="rgb(255, 0, 0)">' .. JohnDoe.Config.Name .. "</font>"
 local M1_DAMAGE = JOHN_DOE_CONFIG.M1.Damage
 local M1_COOLDOWN = JOHN_DOE_CONFIG.M1.Cooldown
-local COUNTER_COOLDOWN = JOHN_DOE_CONFIG.Counter.Cooldown
-local TRAIL_LIFETIME = JOHN_DOE_CONFIG.Trail.Lifetime
-local HULKING_COOLDOWN = JOHN_DOE_CONFIG.HulkingForce.Cooldown
-local DIGITAL_COOLDOWN = JOHN_DOE_CONFIG.DigitalFootprint.Cooldown
-local ERROR404_COOLDOWN = JOHN_DOE_CONFIG.Error404.Cooldown
 
 JohnDoe.Config.Description = {
 	{ Type = "Separator", Text = "GENERAL INFO" },
 	{ Type = "Header", Text = JohnDoe.Config.Name:upper() },
 	{ Type = "Quote", Text = '"' .. JohnDoe.Config.Quote .. '"' },
+	{ Type = "Text", Text = "John Doe is a relentless serial killer whose presence warps the battlefield itself." },
+	{ Type = "Separator", Text = "ABILITIES" },
+	{ Type = "Header", Text = "M1" },
 	{
 		Type = "Text",
-		Text = "A hulking killer with incredible durability and extended forward reach. His bulky frame comes at the cost of slower attacks, but his corruption leaves few survivors unscathed.",
+		Text = NameLabel .. " strikes with a heavy slash dealing " .. tostring(M1_DAMAGE) .. " damage. The hit grants a brief burst of speed on a successful strike.",
 	},
-	{ Type = "Separator", Text = "STATS" },
-	{ Type = "Text", Text = "Health: 31,815 | Speed: +1.5 studs | M1 Damage: " .. tostring(M1_DAMAGE) },
-	{ Type = "Separator", Text = "PASSIVES" },
-	{ Type = "Header", Text = "BULKY ARM" },
+	{ Type = "Header", Text = "HULKING FORCE" },
 	{
 		Type = "Text",
-		Text = "Extended forward reach on attacks in exchange for increased M1 cooldown (" .. tostring(M1_COOLDOWN) .. "s).",
+		Text = NameLabel .. " dashes forward with a forceful lunge, striking enemies in a wide arc and creating a brutal burst on impact.",
+	},
+	{ Type = "Header", Text = "DIGITAL FOOTPRINT" },
+	{
+		Type = "Text",
+		Text = NameLabel .. " plants an energy footprint that slows survivors who step into it, creating a dangerous zone to control.",
+	},
+	{ Type = "Header", Text = "ERROR404" },
+	{
+		Type = "Text",
+		Text = NameLabel .. " highlights nearby survivors and glides through the area before exploding in a burst of damage.",
+	},
+	{ Type = "Separator", Text = "PASSIVES" },
+	{ Type = "Header", Text = "CORRUPT TRAIL" },
+	{
+		Type = "Text",
+		Text = "John Doe leaves a corrupted trail behind him that highlights nearby survivors and increases his movement speed while within it.",
 	},
 	{ Type = "Header", Text = "COUNTER" },
 	{
 		Type = "Text",
-		Text = "When stunned during an ability use, " .. NameLabel .. " automatically counters, entering an animation and flinging the stunner away. Cooldown: " .. tostring(COUNTER_COOLDOWN) .. "s.",
+		Text = "When stunned, John Doe can instantly fling nearby survivors away." ,
 	},
-	{ Type = "Header", Text = "CORRUPT TRAIL" },
-	{
-		Type = "Text",
-		Text = NameLabel .. " leaves a continuous trail of corruption behind him as he moves. Segments last " .. tostring(TRAIL_LIFETIME) .. "s. Survivors who step in it become highlighted and grant " .. "...",
-	},
-	{ Type = "Separator", Text = "ABILITIES" },
-	{ Type = "Header", Text = "M1 ATTACK" },
 }
+
+return JohnDoe
