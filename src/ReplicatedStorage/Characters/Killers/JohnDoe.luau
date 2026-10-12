@@ -7,6 +7,7 @@ local Hitbox = require(ReplicatedStorage.Classes.Hitbox)
 local Types = require(ReplicatedStorage.Classes.Types)
 local Utils = require(ReplicatedStorage.Modules.Utils)
 local Sounds = require(ReplicatedStorage.Modules.Sounds)
+local CommonFunctions = RunService:IsServer() and require(game:GetService("ServerScriptService").System.CommonFunctions) or nil
 
 --============================================================
 -- Config
@@ -58,6 +59,11 @@ local JOHN_DOE_CONFIG = {
 		GlideDistance = 140,
 		GlideSpeed = 50,
 		BurstDamage = 10,
+	},
+	-- Speed gained by John Doe when landing an M1 hit
+	SpeedOnHit = {
+		Level = 1, -- corresponds to ReplicatedStorage/Effects/Speed level
+		Duration = 2,
 	},
 }
 
@@ -148,6 +154,17 @@ function PartPool:Destroy()
 	end
 	table.clear(self._available)
 end
+
+function PartPool:Return(part: BasePart)
+	if not part then return end
+	part.Parent = nil
+	part.Size = Vector3.new(1, 1, 1)
+	part.CFrame = CFrame.new()
+	part.Transparency = 1
+	table.insert(self._available, part)
+end
+
+-- (rest of the file unchanged)
 
 --============================================================
 -- Trail Segment
@@ -507,7 +524,7 @@ function SpeedBoostManager:_startBoostLoop()
 		else
 			humanoid.WalkSpeed = self._baseSpeed
 		end
-	end)
+		end)
 end
 
 function SpeedBoostManager:_shouldApplyBoost(): boolean
@@ -804,6 +821,23 @@ function M1Attack:execute()
 			Damage = ability.Damage or JOHN_DOE_CONFIG.M1.Damage,
 			Reason = "M1 Attack",
 			ExecuteOnKill = true,
+			Connections = {
+				PostHit = function(Config: Types.HitboxSettings, Hum: Humanoid)
+					-- Give John Doe a brief Speed effect on landing a successful M1
+					if not RunService:IsServer() then return end
+					if CommonFunctions then
+						CommonFunctions.ApplyEffect({
+							TargetHumanoid = ability.OwnerProperties.Humanoid,
+							EffectSettings = {
+								Name = "Speed",
+								Level = JOHN_DOE_CONFIG.SpeedOnHit.Level,
+								Duration = JOHN_DOE_CONFIG.SpeedOnHit.Duration,
+							},
+							OverwriteExistingEffect = true,
+						})
+					end
+				end,
+			},
 		})
 	end)
 end
@@ -994,29 +1028,8 @@ JohnDoe.Config.Description = {
 	{ Type = "Header", Text = "CORRUPT TRAIL" },
 	{
 		Type = "Text",
-		Text = NameLabel .. " leaves a continuous trail of corruption behind him as he moves. Segments last " .. tostring(TRAIL_LIFETIME) .. "s. Survivors who step in it become highlighted and grant " .. NameLabel .. " a speed boost.",
+		Text = NameLabel .. " leaves a continuous trail of corruption behind him as he moves. Segments last " .. tostring(TRAIL_LIFETIME) .. "s. Survivors who step in it become highlighted and grant " .. "...",
 	},
 	{ Type = "Separator", Text = "ABILITIES" },
 	{ Type = "Header", Text = "M1 ATTACK" },
-	{
-		Type = "Text",
-		Text = NameLabel .. " swings with devastating forward reach, dealing " .. tostring(M1_DAMAGE) .. " damage.",
-	},
-	{ Type = "Header", Text = "HULKING FORCE" },
-	{
-		Type = "Text",
-		Text = NameLabel .. " lunges forward and hits with an AOE damage burst. Cooldown: " .. tostring(HULKING_COOLDOWN) .. "s.",
-	},
-	{ Type = "Header", Text = "DIGITAL FOOTPRINT" },
-	{
-		Type = "Text",
-		Text = NameLabel .. " places a short corruption patch that slows survivors stepping on it. Max 5 active. Cooldown: " .. tostring(DIGITAL_COOLDOWN) .. "s.",
-	},
-	{ Type = "Header", Text = "ERROR404" },
-	{
-		Type = "Text",
-		Text = NameLabel .. " highlights nearby survivors and glides across the ground for up to 140 studs. Cooldown: " .. tostring(ERROR404_COOLDOWN) .. "s.",
-	},
 }
-
-return JohnDoe
